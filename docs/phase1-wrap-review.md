@@ -21,7 +21,7 @@ Phase 1 **engineering** is done. What remains for cutover is **operational dual-
 
 ## What’s live (inventory)
 
-**App:** home, leads board, inbox (SMS/email/notes), calendar (list + create), jobs, quotes (+ public `/q/[token]`), invoices, reports, settings (incl. Connect button), help/more, support tickets, crew today’s jobs, PWA register.
+**App:** home (incl. 15m speed-to-lead Needs reply), leads board, inbox (SMS/email/notes), calendar (list + create), jobs, quotes (+ public `/q/[token]`), invoices, reports, settings (incl. Connect button), help/more, support tickets, crew today’s jobs, PWA register.
 
 **Public APIs:** `/api/leads`, `/api/reviews/rating`, `/api/public/settings`, `/api/health`, Stripe/Twilio/Inngest webhooks, internal accounts.
 

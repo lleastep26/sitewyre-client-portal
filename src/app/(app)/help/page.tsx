@@ -9,7 +9,7 @@ import {
 const articles = [
   {
     title: "Reply to a new lead",
-    body: "Open Inbox or Leads, tap the contact, send a text. Speed-to-lead timer stops on first human reply.",
+    body: "Aim to reply within 15 minutes. Home shows Needs reply when a lead is still unanswered past that. Timer stops on first human reply (Inbox text, email, or note).",
   },
   {
     title: "Move a lead through the pipeline",
