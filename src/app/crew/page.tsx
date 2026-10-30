@@ -1,6 +1,7 @@
 import { requireMembership } from "@/lib/auth/session";
 import { JobStatusButtons } from "@/app/(app)/jobs/job-actions-form";
 import { CrewChecklist } from "./checklist";
+import { JobPhotos } from "./job-photos";
 
 export default async function CrewPage() {
   const { supabase, client, user } = await requireMembership();
@@ -28,6 +29,9 @@ export default async function CrewPage() {
         {(jobs ?? []).map((job) => (
           <li key={job.id} className="rounded-xl border bg-white p-4">
             <p className="font-medium">{job.address ?? "Job"}</p>
+            {job.notes ? (
+              <p className="mt-1 text-sm text-charcoal/70">{job.notes}</p>
+            ) : null}
             {job.address ? (
               <a
                 className="text-sm text-copper"
@@ -44,6 +48,10 @@ export default async function CrewPage() {
                 (job.checklist as { id: string; label: string; done: boolean }[]) ??
                 []
               }
+            />
+            <JobPhotos
+              jobId={job.id}
+              photos={(job.photos as string[]) ?? []}
             />
             <JobStatusButtons jobId={job.id} />
           </li>

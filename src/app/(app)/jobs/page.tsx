@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
 import { createJob } from "./actions";
 import { JobStatusButtons } from "./job-actions-form";
+import { JobPhotos } from "@/app/crew/job-photos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -31,9 +32,28 @@ export default async function JobsPage({
       </header>
 
       {params.new ? (
-        <form action={async (fd) => { await createJob(fd); }} className="space-y-2 rounded-xl border bg-white p-4">
+        <form
+          action={async (fd) => {
+            await createJob(fd);
+          }}
+          className="space-y-2 rounded-xl border bg-white p-4"
+        >
           <Input name="address" placeholder="Job address" />
           <Input name="scheduled_start" type="datetime-local" />
+          <Input name="notes" placeholder="Notes (optional)" />
+          <label className="block text-xs text-charcoal/70">
+            Recurrence (90-day horizon)
+            <select
+              name="recurrence_rule"
+              className="mt-1 w-full rounded-md border border-charcoal/15 bg-white px-3 py-2 text-sm"
+              defaultValue=""
+            >
+              <option value="">One-time</option>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
           <Button type="submit" className="w-full">
             Create job
           </Button>
@@ -42,9 +62,25 @@ export default async function JobsPage({
 
       <ul className="space-y-2">
         {(jobs ?? []).map((job) => (
-          <li key={job.id} className="rounded-lg border border-charcoal/10 bg-white p-3">
+          <li
+            key={job.id}
+            className="rounded-lg border border-charcoal/10 bg-white p-3"
+          >
             <p className="font-medium">{job.address ?? "No address"}</p>
-            <p className="text-xs text-charcoal/60">{job.status}</p>
+            <p className="text-xs text-charcoal/60">
+              {job.status}
+              {job.recurrence_rule ? ` · ${job.recurrence_rule}` : ""}
+              {job.scheduled_start
+                ? ` · ${new Date(job.scheduled_start).toLocaleString()}`
+                : ""}
+            </p>
+            {job.notes ? (
+              <p className="mt-1 text-sm text-charcoal/70">{job.notes}</p>
+            ) : null}
+            <JobPhotos
+              jobId={job.id}
+              photos={(job.photos as string[]) ?? []}
+            />
             <JobStatusButtons jobId={job.id} />
             <Link
               href={`/invoices?from_job=${job.id}`}

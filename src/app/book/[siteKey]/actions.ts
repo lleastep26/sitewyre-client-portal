@@ -97,7 +97,11 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     scheduled_start: start.toISOString(),
     scheduled_end: end.toISOString(),
     assignee_ids: client.user_id ? [client.user_id] : [],
-    checklist: [],
+    checklist: [
+      { id: "1", label: "Arrive on site", done: false },
+      { id: "2", label: "Complete work", done: false },
+      { id: "3", label: "Collect photos", done: false },
+    ],
   });
 
   await enqueueAppointmentSms({
@@ -106,6 +110,8 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     businessName: client.business_name ?? "us",
     title,
     startAt: start,
+    clientId: client.id,
+    timeZone: client.timezone,
   });
 
   redirect(`/book/${siteKey}?booked=1`);

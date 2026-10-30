@@ -33,4 +33,6 @@
 - Google Calendar sync  
 - Day/crew multi-resource layouts beyond week + assignee  
 - Workflow builder expansion  
-- Phase 3 money flows
+- Phase 3 money flows  
+
+**Follow-on (P2-T4–T7):** [phase2-jobs-automations.md](./phase2-jobs-automations.md) — crew photos, recurrence, quiet hours, automations run log.

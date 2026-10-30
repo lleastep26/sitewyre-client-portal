@@ -43,6 +43,8 @@ export async function createAppointment(formData: FormData) {
     businessName: client.business_name ?? "us",
     title,
     startAt,
+    clientId: client.id,
+    timeZone: client.timezone,
   });
 
   revalidatePath("/calendar");
