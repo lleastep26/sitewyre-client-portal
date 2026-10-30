@@ -44,8 +44,13 @@ export function InvoiceActions({
       >
         Record cash
       </Button>
-      <Link href={`/pay/${publicToken}`} className="self-center text-xs text-copper">
-        Pay link
+      <Link
+        href={`/pay/${publicToken}`}
+        className="self-center text-xs text-copper underline-offset-2 hover:underline"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open pay page
       </Link>
     </div>
   );

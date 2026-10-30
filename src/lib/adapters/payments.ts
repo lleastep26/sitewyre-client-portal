@@ -1,10 +1,20 @@
 import Stripe from "stripe";
-import type { PaymentsProvider } from "./types";
+import type { PaymentIntentSnapshot, PaymentsProvider } from "./types";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("STRIPE_SECRET_KEY missing");
   return new Stripe(key);
+}
+
+const REUSABLE_STATUSES = new Set([
+  "requires_payment_method",
+  "requires_confirmation",
+  "requires_action",
+]);
+
+export function isReusablePaymentIntentStatus(status: string) {
+  return REUSABLE_STATUSES.has(status);
 }
 
 export class StripePaymentsProvider implements PaymentsProvider {
@@ -40,17 +50,30 @@ export class StripePaymentsProvider implements PaymentsProvider {
     metadata?: Record<string, string>;
   }) {
     const stripe = getStripe();
-    const intent = await stripe.paymentIntents.create(
-      {
-        amount: opts.amountCents,
-        currency: opts.currency ?? "usd",
-        automatic_payment_methods: { enabled: true },
-        metadata: opts.metadata,
-        application_fee_amount: 0,
-        transfer_data: { destination: opts.connectedAccountId },
-      },
-    );
+    const intent = await stripe.paymentIntents.create({
+      amount: opts.amountCents,
+      currency: opts.currency ?? "usd",
+      automatic_payment_methods: { enabled: true },
+      metadata: opts.metadata,
+      application_fee_amount: 0,
+      transfer_data: { destination: opts.connectedAccountId },
+    });
     return { id: intent.id, clientSecret: intent.client_secret ?? "" };
+  }
+
+  async retrievePaymentIntent(id: string): Promise<PaymentIntentSnapshot | null> {
+    const stripe = getStripe();
+    try {
+      const intent = await stripe.paymentIntents.retrieve(id);
+      return {
+        id: intent.id,
+        clientSecret: intent.client_secret ?? "",
+        status: intent.status,
+        amountCents: intent.amount,
+      };
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -63,6 +86,14 @@ export class FakePaymentsProvider implements PaymentsProvider {
   }
   async createPaymentIntent() {
     return { id: "pi_fake", clientSecret: "pi_fake_secret" };
+  }
+  async retrievePaymentIntent(id: string): Promise<PaymentIntentSnapshot | null> {
+    return {
+      id,
+      clientSecret: `${id}_secret`,
+      status: "requires_payment_method",
+      amountCents: 1000,
+    };
   }
 }
 

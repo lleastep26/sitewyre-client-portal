@@ -63,7 +63,7 @@ Do (monitoring):
 3. `api/sendgrid/inbound` must not fall back to “first client” (hardened in wrap).  
 4. CRM RLS in `0003` lets any member (incl. crew) write many tables — tighten later.  
 5. Admin with no membership picks arbitrary first client — OK for now with 2 clients.  
-6. Pay page creates PaymentIntent but no Payment Element yet (Phase 3).  
+6. Pay page Payment Element shipped (Phase 3 MVP) — see [phase3-pay-mvp.md](./phase3-pay-mvp.md); Connect Accounts v2 / fees later.  
 7. Calendar week view + slots MVP shipped; day/crew layouts and Google sync still later.  
 8. Revoke any leftover Supabase/n8n tokens from chat if still active.
 

@@ -27,6 +27,13 @@ export interface EmailProvider {
   send(input: SendEmailInput): Promise<SendEmailResult>;
 }
 
+export type PaymentIntentSnapshot = {
+  id: string;
+  clientSecret: string;
+  status: string;
+  amountCents: number;
+};
+
 export interface PaymentsProvider {
   createConnectAccount(email: string, businessName: string): Promise<{ accountId: string }>;
   createAccountLink(accountId: string, refreshUrl: string, returnUrl: string): Promise<{ url: string }>;
@@ -36,6 +43,7 @@ export interface PaymentsProvider {
     connectedAccountId: string;
     metadata?: Record<string, string>;
   }): Promise<{ id: string; clientSecret: string }>;
+  retrievePaymentIntent(id: string): Promise<PaymentIntentSnapshot | null>;
 }
 
 export interface AiProvider {
