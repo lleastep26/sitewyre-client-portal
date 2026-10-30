@@ -11,6 +11,7 @@
 | **P2-T5** | Job create recurrence: weekly / biweekly / monthly expanded over **90 days** |
 | **P2-T6** | Appointment confirm + **24h** + **2h** reminders; quiet hours **9pm–8am** in `clients.timezone` |
 | **P2-T7** | Automations 1–8 status + `/automations` run log; unanswered lead follow-up (2d); workflow logging on reminders |
+| **Follow-on** | Automation **9** missed-call text-back — see [phase4-automations-mobile.md](./phase4-automations-mobile.md) |
 
 ## Apply migration
 

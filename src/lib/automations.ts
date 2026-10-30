@@ -46,6 +46,12 @@ export const AUTOMATION_DEFS = [
     defaultTemplate:
       "Hi from {{business_name}} — ready to book your next visit?",
   },
+  {
+    key: "missed_call_text_back",
+    label: "9. Missed-call text-back (30s)",
+    defaultTemplate:
+      "Sorry we missed your call to {{business_name}}. How can we help?",
+  },
 ] as const;
 
 export type AutomationKey = (typeof AUTOMATION_DEFS)[number]["key"];

@@ -204,6 +204,14 @@ export const missedCallTextBack = inngest.createFunction(
     const { clientId, from } = event.data;
     await step.sleep("wait-30s", "30s");
     const supabase = createAdminClient();
+
+    const auto = await getAutomationState(
+      supabase,
+      clientId,
+      "missed_call_text_back",
+    );
+    if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
     const { data: client } = await supabase
       .from("clients")
       .select("*")
@@ -213,12 +221,18 @@ export const missedCallTextBack = inngest.createFunction(
 
     await respectQuietHours(step, client.timezone ?? "America/Chicago");
 
+    const body = applyTemplate(
+      auto.templateBody ??
+        "Sorry we missed your call to {{business_name}}. How can we help?",
+      { business_name: client.business_name ?? "us" },
+    );
+
     const sms = getSmsProvider();
     await step.run("sms-missed", async () =>
       sms.send({
         to: normalizePhone(from),
         from: client.twilio_phone_number!,
-        body: `Sorry we missed your call to ${client.business_name}. How can we help?`,
+        body,
       }),
     );
 
@@ -676,7 +690,16 @@ export const healthMonitor = inngest.createFunction(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     return step.run("ping-health", async () => {
       const res = await fetch(`${appUrl}/api/health`);
-      return { ok: res.ok, status: res.status };
+      if (!res.ok) return { ok: false, status: res.status };
+      const body = (await res.json()) as {
+        ok?: boolean;
+        checks?: Record<string, boolean>;
+      };
+      return {
+        ok: Boolean(body.ok),
+        status: res.status,
+        checks: body.checks ?? null,
+      };
     });
   },
 );

@@ -9,6 +9,7 @@
 | Invoice reminders | On send → Inngest 3d + 7d follow-ups if still unpaid (email + SMS); skips paid/void |
 | Day / crew calendar | `/calendar?view=day` hour × assignee lanes; week view unchanged |
 | Help status | `/help` system checks: health, Twilio, Connect, booking link |
+| Help deepen | `/help` Platform vs account: Supabase, Turnstile, Twilio/Stripe/Resend/Inngest/VAPID flags from `/api/health` |
 
 ## Guardrails
 

@@ -1,6 +1,10 @@
 import { requireMembership } from "@/lib/auth/session";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getAppUrl } from "@/lib/supabase/env";
+import {
+  HEALTH_CHECK_LABELS,
+  type HealthChecks,
+} from "@/lib/health/checks";
 
 const articles = [
   {
@@ -25,23 +29,61 @@ const articles = [
   },
 ];
 
+type StatusRow = {
+  label: string;
+  ok: boolean;
+  detail: string;
+};
+
 export default async function HelpPage() {
   const { client } = await requireMembership();
   const appUrl = getAppUrl();
+
   let healthOk = false;
+  let healthTime: string | null = null;
+  let platformChecks: HealthChecks | null = null;
   try {
     const res = await fetch(`${appUrl}/api/health`, { cache: "no-store" });
     healthOk = res.ok;
+    if (res.ok) {
+      const body = (await res.json()) as {
+        time?: string;
+        checks?: HealthChecks;
+      };
+      healthTime = body.time ?? null;
+      platformChecks = body.checks ?? null;
+    }
   } catch {
     healthOk = false;
   }
 
-  const checks = [
+  const platformRows: StatusRow[] = [
     {
-      label: "Portal health",
+      label: "Portal API",
       ok: healthOk,
-      detail: healthOk ? "Responding" : "Unreachable",
+      detail: healthOk
+        ? healthTime
+          ? `Responding · ${new Date(healthTime).toLocaleString()}`
+          : "Responding"
+        : "Unreachable",
     },
+    ...(Object.keys(HEALTH_CHECK_LABELS) as (keyof HealthChecks)[]).map(
+      (key): StatusRow => {
+        const ok = platformChecks?.[key] ?? false;
+        return {
+          label: HEALTH_CHECK_LABELS[key],
+          ok: healthOk && ok,
+          detail: !healthOk
+            ? "Unknown"
+            : ok
+              ? "Configured"
+              : "Not set (optional until needed)",
+        };
+      },
+    ),
+  ];
+
+  const accountRows: StatusRow[] = [
     {
       label: "Twilio number",
       ok: Boolean(client?.twilio_phone_number),
@@ -70,8 +112,24 @@ export default async function HelpPage() {
 
       <Card>
         <CardTitle>System status</CardTitle>
-        <ul className="mt-3 space-y-2 text-sm">
-          {checks.map((c) => (
+        <p className="mt-2 text-xs font-medium uppercase tracking-wide text-charcoal/50">
+          Platform
+        </p>
+        <ul className="mt-2 space-y-2 text-sm">
+          {platformRows.map((c) => (
+            <li key={c.label} className="flex justify-between gap-2">
+              <span>{c.label}</span>
+              <span className={c.ok ? "text-copper" : "text-charcoal/50"}>
+                {c.ok ? "OK" : "Check"} · {c.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-charcoal/50">
+          Your account
+        </p>
+        <ul className="mt-2 space-y-2 text-sm">
+          {accountRows.map((c) => (
             <li key={c.label} className="flex justify-between gap-2">
               <span>{c.label}</span>
               <span className={c.ok ? "text-copper" : "text-charcoal/50"}>
@@ -81,7 +139,8 @@ export default async function HelpPage() {
           ))}
         </ul>
         <CardDescription className="mt-3">
-          Background health ping runs every 15 minutes via Inngest.
+          Background health ping runs every 15 minutes via Inngest. Missing
+          platform keys soft-skip (e.g. VAPID unset → no web push).
         </CardDescription>
       </Card>
 
