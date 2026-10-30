@@ -9,7 +9,7 @@
 | **Turnstile** | `/api/leads` + `/api/reviews/rating` verify when `TURNSTILE_SECRET_KEY` is set; skipped otherwise (n8n dual-write safe) |
 | **Crew RLS** | Migration `0005_crew_rls_tighten.sql` — crew writes jobs/appointments/inbox; quotes/invoices/settings-like tables owner/office only |
 | **Expo app** | `apps/mobile` — login + crew today against shared Supabase |
-| **Owner mobile** | Owner/office: Leads + Inbox read-only tabs + Today; crew stays Today-only |
+| **Owner mobile** | Owner/office: Leads + Inbox (SMS reply) + Today; crew stays Today-only |
 
 ## Apply
 

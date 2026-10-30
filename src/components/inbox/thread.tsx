@@ -187,7 +187,7 @@ export function InboxThread({
                 phone,
                 email,
               });
-              if (res.error) setError(res.error);
+              if ("error" in res) setError(res.error ?? "Send failed");
               else {
                 setBody("");
                 setError(null);
