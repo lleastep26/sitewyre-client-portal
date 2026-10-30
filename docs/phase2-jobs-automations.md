@@ -29,7 +29,8 @@ Without it, photo upload returns a clear error.
 
 ## Still later
 
-- Quote follow-ups (#3) and rebooking nudge (#8)  
 - Editable templates / per-automation toggles  
 - Google Calendar (P2-T8) after Phase 1 dual-write gate  
 - Day/crew multi-resource calendar layouts  
+
+**Follow-on:** [phase3-quotes-billing.md](./phase3-quotes-billing.md) — quote follow-ups, rebooking, deposit e-sign, monthly snapshot, billing features.

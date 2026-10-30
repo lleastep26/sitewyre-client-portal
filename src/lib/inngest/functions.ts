@@ -291,6 +291,224 @@ export const invoiceReminder = inngest.createFunction(
   },
 );
 
+export const quoteFollowUp = inngest.createFunction(
+  { id: "quote-follow-up", triggers: [{ event: "portal/quote.sent" }] },
+  async ({
+    event,
+    step,
+  }: {
+    event: { data: { quoteId: string; clientId: string } };
+    step: Step;
+  }) => {
+    const { quoteId, clientId } = event.data;
+
+    async function sendAttempt(attempt: 1 | 2) {
+      const supabase = createAdminClient();
+      const { data: quote } = await supabase
+        .from("quotes")
+        .select("id, status, number, public_token, contact_id, expires_at")
+        .eq("id", quoteId)
+        .maybeSingle();
+      if (!quote || quote.status !== "sent") {
+        return { skipped: true as const, reason: "not_open" };
+      }
+      if (quote.expires_at && new Date(quote.expires_at).getTime() < Date.now()) {
+        return { skipped: true as const, reason: "expired" };
+      }
+
+      const { data: client } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .single();
+      if (!client) return { skipped: true as const };
+
+      await respectQuietHours(
+        step,
+        client.timezone ?? "America/Chicago",
+        `quiet-quote-${attempt}`,
+      );
+
+      let phone: string | null = null;
+      let email: string | null = null;
+      if (quote.contact_id) {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("phones, emails")
+          .eq("id", quote.contact_id)
+          .maybeSingle();
+        phone = contact?.phones?.[0] ? normalizePhone(contact.phones[0]) : null;
+        email = contact?.emails?.[0] ?? null;
+      }
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const link = `${appUrl}/q/${quote.public_token}`;
+      const body =
+        attempt === 1
+          ? `Friendly reminder: your quote ${quote.number} from ${client.business_name} is ready: ${link}`
+          : `Last reminder: quote ${quote.number} from ${client.business_name} expires soon: ${link}`;
+
+      if (phone && client.twilio_phone_number) {
+        await getSmsProvider().send({
+          to: phone,
+          from: client.twilio_phone_number,
+          body,
+        });
+      }
+      if (email) {
+        await getEmailProvider().send({
+          to: email,
+          subject: `Reminder: quote ${quote.number}`,
+          html: `<p>${body}</p>`,
+          text: body,
+        });
+      }
+
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "quote_follow_up",
+        status: phone || email ? "sent" : "skipped",
+        log: { quoteId, attempt, phone, email },
+      });
+      return { ok: true as const, attempt };
+    }
+
+    await step.sleep("wait-3d", "3d");
+    await step.run("follow-up-1", () => sendAttempt(1));
+    await step.sleep("wait-4d-more", "4d");
+    await step.run("follow-up-2", () => sendAttempt(2));
+    return { ok: true };
+  },
+);
+
+export const rebookingNudge = inngest.createFunction(
+  { id: "rebooking-nudge", triggers: [{ event: "portal/job.completed" }] },
+  async ({
+    event,
+    step,
+  }: {
+    event: { data: { jobId: string; clientId: string } };
+    step: Step;
+  }) => {
+    const { jobId, clientId } = event.data;
+    await step.sleep("wait-14d", "14d");
+
+    const supabase = createAdminClient();
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id, contact_id, status")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (!job) return { skipped: true };
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+    if (!client?.twilio_phone_number || !client.site_key) {
+      return { skipped: true };
+    }
+
+    let phone: string | null = null;
+    if (job.contact_id) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("phones")
+        .eq("id", job.contact_id)
+        .maybeSingle();
+      phone = contact?.phones?.[0] ? normalizePhone(contact.phones[0]) : null;
+    }
+    if (!phone) return { skipped: true, reason: "no_phone" };
+
+    await respectQuietHours(step, client.timezone ?? "America/Chicago", "quiet-rebook");
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const link = `${appUrl}/book/${client.site_key}`;
+    const body = `Hi from ${client.business_name} — ready to book your next visit? ${link}`;
+
+    await step.run("sms-rebook", async () =>
+      getSmsProvider().send({
+        to: phone!,
+        from: client.twilio_phone_number!,
+        body,
+      }),
+    );
+
+    await step.run("log-rebook", async () => {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "rebooking_nudge",
+        status: "sent",
+        log: { jobId, phone },
+      });
+    });
+
+    return { ok: true };
+  },
+);
+
+export const monthlyResultsEmail = inngest.createFunction(
+  { id: "monthly-results-email", triggers: [{ cron: "0 14 1 * *" }] },
+  async ({
+    step,
+  }: {
+    step: { run: <T>(id: string, fn: () => Promise<T>) => Promise<T> };
+  }) => {
+    return step.run("send-all-clients", async () => {
+      const supabase = createAdminClient();
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, business_name, phone, plan, status")
+        .eq("status", "active");
+
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      let sent = 0;
+
+      for (const client of clients ?? []) {
+        if (!client.phone) continue;
+        const [{ count: leadsCount }, { data: invoices }] = await Promise.all([
+          supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("client_id", client.id)
+            .gte("created_at", since.toISOString()),
+          supabase
+            .from("invoices")
+            .select("total, amount_paid, status")
+            .eq("client_id", client.id)
+            .gte("created_at", since.toISOString()),
+        ]);
+        const collected = (invoices ?? []).reduce(
+          (s, i) => s + Number(i.amount_paid ?? 0),
+          0,
+        );
+        const unpaid = (invoices ?? [])
+          .filter((i) => i.status !== "paid")
+          .reduce(
+            (s, i) => s + (Number(i.total) - Number(i.amount_paid)),
+            0,
+          );
+
+        const body = `${client.business_name} monthly snapshot: ${leadsCount ?? 0} leads, $${collected.toFixed(0)} collected, $${unpaid.toFixed(0)} unpaid (last 30d).`;
+        await getSmsProvider().send({
+          to: normalizePhone(client.phone),
+          body,
+        });
+        await supabase.from("workflow_runs").insert({
+          client_id: client.id,
+          trigger: "monthly_results",
+          status: "sent",
+          log: { leadsCount, collected, unpaid, channel: "sms" },
+        });
+        sent += 1;
+      }
+      return { sent };
+    });
+  },
+);
+
 export const healthMonitor = inngest.createFunction(
   { id: "health-monitor", triggers: [{ cron: "*/15 * * * *" }] },
   async ({
@@ -312,5 +530,8 @@ export const functions = [
   missedCallTextBack,
   appointmentReminder,
   invoiceReminder,
+  quoteFollowUp,
+  rebookingNudge,
+  monthlyResultsEmail,
   healthMonitor,
 ];

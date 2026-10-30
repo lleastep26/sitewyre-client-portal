@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth/session";
 import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import { getAppUrl } from "@/lib/supabase/env";
+import { inngest } from "@/lib/inngest/client";
 
 export async function createQuote(formData: FormData) {
   const { supabase, client } = await requireMembership();
@@ -84,6 +85,21 @@ export async function sendQuote(quoteId: string) {
   }
 
   await supabase.from("quotes").update({ status: "sent" }).eq("id", quoteId);
+
+  await inngest
+    .send({
+      name: "portal/quote.sent",
+      data: { quoteId, clientId: client.id },
+    })
+    .catch(() => undefined);
+
+  await supabase.from("workflow_runs").insert({
+    client_id: client.id,
+    trigger: "quote_sent",
+    status: "sent",
+    log: { quoteId, link },
+  });
+
   revalidatePath("/quotes");
   return { ok: true, link };
 }

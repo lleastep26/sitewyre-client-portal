@@ -22,6 +22,33 @@ function timeInputValue(t: unknown) {
   return raw.slice(0, 5) || "09:00";
 }
 
+function BillingFeatures({
+  features,
+}: {
+  features: { feature: string; enabled: boolean }[];
+}) {
+  if (!features.length) {
+    return (
+      <p className="mt-2 text-xs text-charcoal/50">
+        Feature list unavailable — defaults allow core CRM tools.
+      </p>
+    );
+  }
+  return (
+    <ul className="mt-3 space-y-1 text-xs text-charcoal/70">
+      {features.map((row) => (
+        <li key={row.feature} className="flex justify-between gap-2">
+          <span>{row.feature.replaceAll("_", " ")}</span>
+          <span>{row.enabled ? "included" : "off"}</span>
+        </li>
+      ))}
+      <li className="pt-1 text-charcoal/50">
+        SMS / email overage meters: placeholder
+      </li>
+    </ul>
+  );
+}
+
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -43,6 +70,12 @@ export default async function SettingsPage({
   } catch {
     // Soft-fail: page should still render without seeded hours.
   }
+
+  const { data: planFeatureRows } = await supabase
+    .from("plan_features")
+    .select("feature, enabled")
+    .eq("plan", client.plan ?? "contractor_299")
+    .order("feature");
 
   const { data: availabilityRows, error: availabilityError } = await supabase
     .from("availability")
@@ -302,6 +335,7 @@ export default async function SettingsPage({
           Plan: {client.plan ?? "contractor_299"} ($299/mo package). Usage
           overages will appear here once limits are finalized.
         </CardDescription>
+        <BillingFeatures features={planFeatureRows ?? []} />
       </Card>
 
       <Card>

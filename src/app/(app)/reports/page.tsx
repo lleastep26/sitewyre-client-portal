@@ -121,6 +121,10 @@ export default async function ReportsPage() {
       >
         Download CSV →
       </a>
+      <p className="text-xs text-charcoal/50">
+        Monthly snapshot SMS runs on the 1st (Inngest) to the business phone when
+        set.
+      </p>
     </div>
   );
 }

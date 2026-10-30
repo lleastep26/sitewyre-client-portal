@@ -8,7 +8,11 @@ const BUILTIN = [
     label: "2. Unanswered lead follow-up (2 days)",
     status: "live",
   },
-  { key: "quote_follow_up", label: "3. Quote follow-ups", status: "planned" },
+  {
+    key: "quote_follow_up",
+    label: "3. Quote follow-ups (3d + 7d)",
+    status: "live",
+  },
   {
     key: "appointment_reminder",
     label: "4. Appointment confirm + 24h + 2h (quiet hours)",
@@ -17,7 +21,11 @@ const BUILTIN = [
   { key: "on_my_way", label: "5. On-my-way SMS", status: "live" },
   { key: "review_request", label: "6. Review request on complete", status: "live" },
   { key: "invoice_reminder", label: "7. Invoice reminders", status: "partial" },
-  { key: "rebooking_nudge", label: "8. Rebooking nudge", status: "planned" },
+  {
+    key: "rebooking_nudge",
+    label: "8. Rebooking nudge (14d after complete)",
+    status: "live",
+  },
 ] as const;
 
 export default async function AutomationsPage() {

@@ -10,6 +10,7 @@ import {
   expandRecurrence,
   parseRecurrenceRule,
 } from "@/lib/scheduling/recurrence";
+import { hasFeature } from "@/lib/features";
 import { normalizePhone } from "@/lib/utils";
 
 const DEFAULT_CHECKLIST = [
@@ -48,6 +49,16 @@ export async function createJob(formData: FormData) {
   const recurrence = parseRecurrenceRule(
     String(formData.get("recurrence_rule") ?? ""),
   );
+  if (recurrence) {
+    const allowed = await hasFeature(
+      supabase,
+      client.plan ?? "contractor_299",
+      "recurring_jobs",
+    );
+    if (!allowed) {
+      return { error: "Recurring jobs are not on your plan" };
+    }
+  }
   const startDate = start ? new Date(start) : null;
   if (start && Number.isNaN(startDate!.getTime())) {
     return { error: "Invalid start time" };
@@ -166,6 +177,13 @@ export async function updateJobStatus(input: {
       status: phone ? "sent" : "skipped",
       log: { jobId: input.jobId, phone: phone ?? null },
     });
+
+    await inngest
+      .send({
+        name: "portal/job.completed",
+        data: { jobId: input.jobId, clientId: client.id },
+      })
+      .catch(() => undefined);
   }
 
   revalidatePath("/jobs");
