@@ -78,7 +78,7 @@ export async function GET(request: Request) {
     durationMinutes: service.duration_minutes,
     availability,
     busy: appointments ?? [],
-    timeZone: client.timezone ?? undefined,
+    timeZone: client.timezone ?? "America/Chicago",
   });
 
   return json({

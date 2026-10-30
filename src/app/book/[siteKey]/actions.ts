@@ -64,6 +64,7 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     durationMinutes: duration,
     availability: availability ?? [],
     busy: appointments ?? [],
+    timeZone: client.timezone ?? "America/Chicago",
   });
   if (!free) {
     return { error: "That time was just taken. Pick another slot." };
