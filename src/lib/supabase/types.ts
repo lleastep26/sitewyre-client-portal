@@ -252,6 +252,13 @@ export type Database = {
         log: unknown;
         created_at: string;
       }>;
+      client_automations: TableDef<{
+        client_id: string;
+        trigger: string;
+        enabled: boolean;
+        template_body: string | null;
+        updated_at: string | null;
+      }>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

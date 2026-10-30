@@ -11,6 +11,10 @@ import {
   parseRecurrenceRule,
 } from "@/lib/scheduling/recurrence";
 import { hasFeature } from "@/lib/features";
+import {
+  applyTemplate,
+  getAutomationState,
+} from "@/lib/automations";
 import { normalizePhone } from "@/lib/utils";
 
 const DEFAULT_CHECKLIST = [
@@ -120,40 +124,54 @@ export async function updateJobStatus(input: {
   const timeZone = client.timezone ?? "America/Chicago";
 
   if (input.status === "en_route" && phone && client.twilio_phone_number) {
-    const sendAt = nextSendableAt(new Date(), timeZone);
-    if (sendAt.getTime() <= Date.now() + 5_000) {
-      await getSmsProvider().send({
-        to: phone,
-        from: client.twilio_phone_number,
-        body: `${client.business_name}: we're on the way.`,
+    const auto = await getAutomationState(supabase, client.id, "on_my_way");
+    if (auto.enabled) {
+      const body = applyTemplate(
+        auto.templateBody ?? "{{business_name}}: we're on the way.",
+        { business_name: client.business_name ?? "us" },
+      );
+      const sendAt = nextSendableAt(new Date(), timeZone);
+      if (sendAt.getTime() <= Date.now() + 5_000) {
+        await getSmsProvider().send({
+          to: phone,
+          from: client.twilio_phone_number,
+          body,
+        });
+      } else {
+        await inngest
+          .send({
+            name: "portal/appointment.reminder",
+            data: {
+              to: phone,
+              from: client.twilio_phone_number,
+              body,
+              clientId: client.id,
+              trigger: "on_my_way",
+            },
+            ts: sendAt.getTime(),
+          })
+          .catch(() => undefined);
+      }
+      await supabase.from("workflow_runs").insert({
+        client_id: client.id,
+        trigger: "on_my_way",
+        status: "sent",
+        log: {
+          jobId: input.jobId,
+          deferred: sendAt.getTime() > Date.now() + 5_000,
+        },
       });
-    } else {
-      await inngest
-        .send({
-          name: "portal/appointment.reminder",
-          data: {
-            to: phone,
-            from: client.twilio_phone_number,
-            body: `${client.business_name}: we're on the way.`,
-            clientId: client.id,
-            trigger: "on_my_way",
-          },
-          ts: sendAt.getTime(),
-        })
-        .catch(() => undefined);
     }
-    await supabase.from("workflow_runs").insert({
-      client_id: client.id,
-      trigger: "on_my_way",
-      status: "sent",
-      log: { jobId: input.jobId, deferred: sendAt.getTime() > Date.now() + 5_000 },
-    });
   }
 
   if (input.status === "complete") {
-    const reviewBody =
-      `Thanks for choosing ${client.business_name}! Mind leaving a quick review? ${client.google_review_url ?? ""}`.trim();
-    if (phone && client.twilio_phone_number) {
+    const auto = await getAutomationState(supabase, client.id, "review_request");
+    if (auto.enabled && phone && client.twilio_phone_number) {
+      const reviewBody = `${applyTemplate(
+        auto.templateBody ??
+          "Thanks for choosing {{business_name}}! Mind leaving a quick review?",
+        { business_name: client.business_name ?? "us" },
+      )} ${client.google_review_url ?? ""}`.trim();
       const sendAt = nextSendableAt(new Date(), timeZone);
       await inngest
         .send({
@@ -170,13 +188,20 @@ export async function updateJobStatus(input: {
             : {}),
         })
         .catch(() => undefined);
+      await supabase.from("workflow_runs").insert({
+        client_id: client.id,
+        trigger: "review_request",
+        status: "sent",
+        log: { jobId: input.jobId, phone },
+      });
+    } else if (!auto.enabled) {
+      await supabase.from("workflow_runs").insert({
+        client_id: client.id,
+        trigger: "review_request",
+        status: "skipped",
+        log: { jobId: input.jobId, reason: "disabled" },
+      });
     }
-    await supabase.from("workflow_runs").insert({
-      client_id: client.id,
-      trigger: "review_request",
-      status: phone ? "sent" : "skipped",
-      log: { jobId: input.jobId, phone: phone ?? null },
-    });
 
     await inngest
       .send({

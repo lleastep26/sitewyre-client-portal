@@ -4,6 +4,10 @@ import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import { getTradePreset } from "@/lib/trade-presets";
 import { normalizePhone } from "@/lib/utils";
 import { nextSendableAt } from "@/lib/scheduling/quiet-hours";
+import {
+  applyTemplate,
+  getAutomationState,
+} from "@/lib/automations";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -54,16 +58,21 @@ export const leadAutoReply = inngest.createFunction(
 
     if (!client) return { skipped: true };
 
+    const auto = await getAutomationState(supabase, clientId, "lead_auto_reply");
+    if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
     await respectQuietHours(step, client.timezone ?? "America/Chicago");
 
     const preset = getTradePreset(client.trade ?? "other");
     const template =
+      auto.templateBody ??
       preset.templates.find((t) => t.key === "lead_auto_reply")?.body ??
       "Hi {{first_name}}, thanks for contacting {{business_name}}.";
     const firstName = name.split(" ")[0] ?? name;
-    const body = template
-      .replaceAll("{{first_name}}", firstName)
-      .replaceAll("{{business_name}}", client.business_name ?? "us");
+    const body = applyTemplate(template, {
+      first_name: firstName,
+      business_name: client.business_name ?? "us",
+    });
 
     const sms = getSmsProvider();
     const to = normalizePhone(phone);
@@ -117,6 +126,13 @@ export const leadUnansweredFollowUp = inngest.createFunction(
     await step.sleep("wait-2d", "2d");
 
     const supabase = createAdminClient();
+    const auto = await getAutomationState(
+      supabase,
+      clientId,
+      "lead_unanswered_follow_up",
+    );
+    if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
     const { data: lead } = await supabase
       .from("leads")
       .select("id, first_response_at, phone")
@@ -137,7 +153,14 @@ export const leadUnansweredFollowUp = inngest.createFunction(
 
     const to = normalizePhone(lead.phone || phone);
     const firstName = name.split(" ")[0] ?? name;
-    const body = `Hi ${firstName}, just checking in from ${client.business_name ?? "us"} — still happy to help whenever you're ready.`;
+    const body = applyTemplate(
+      auto.templateBody ??
+        `Hi {{first_name}}, just checking in from {{business_name}} — still happy to help whenever you're ready.`,
+      {
+        first_name: firstName,
+        business_name: client.business_name ?? "us",
+      },
+    );
 
     await step.run("sms-follow-up", async () =>
       getSmsProvider().send({
@@ -226,6 +249,13 @@ export const appointmentReminder = inngest.createFunction(
     let timeZone = "America/Chicago";
     if (clientId) {
       const supabase = createAdminClient();
+      const gateKey =
+        trigger === "on_my_way" || trigger === "review_request"
+          ? trigger
+          : "appointment_reminder";
+      const auto = await getAutomationState(supabase, clientId, gateKey);
+      if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
       const { data: client } = await supabase
         .from("clients")
         .select("timezone")
@@ -301,6 +331,11 @@ export const invoiceFollowUp = inngest.createFunction(
     step: Step;
   }) => {
     const { invoiceId, clientId } = event.data;
+    {
+      const supabase = createAdminClient();
+      const auto = await getAutomationState(supabase, clientId, "invoice_reminder");
+      if (!auto.enabled) return { skipped: true, reason: "disabled" };
+    }
 
     async function sendIfUnpaid(attempt: 1 | 2) {
       const supabase = createAdminClient();
@@ -402,6 +437,11 @@ export const quoteFollowUp = inngest.createFunction(
     step: Step;
   }) => {
     const { quoteId, clientId } = event.data;
+    {
+      const supabase = createAdminClient();
+      const auto = await getAutomationState(supabase, clientId, "quote_follow_up");
+      if (!auto.enabled) return { skipped: true, reason: "disabled" };
+    }
 
     async function sendAttempt(attempt: 1 | 2) {
       const supabase = createAdminClient();
@@ -495,6 +535,9 @@ export const rebookingNudge = inngest.createFunction(
     await step.sleep("wait-14d", "14d");
 
     const supabase = createAdminClient();
+    const auto = await getAutomationState(supabase, clientId, "rebooking_nudge");
+    if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
     const { data: job } = await supabase
       .from("jobs")
       .select("id, contact_id, status")
@@ -526,7 +569,11 @@ export const rebookingNudge = inngest.createFunction(
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const link = `${appUrl}/book/${client.site_key}`;
-    const body = `Hi from ${client.business_name} — ready to book your next visit? ${link}`;
+    const body = `${applyTemplate(
+      auto.templateBody ??
+        "Hi from {{business_name}} — ready to book your next visit?",
+      { business_name: client.business_name ?? "us" },
+    )} ${link}`;
 
     await step.run("sms-rebook", async () =>
       getSmsProvider().send({

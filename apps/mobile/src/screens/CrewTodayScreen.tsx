@@ -2,13 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Linking,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { signOut, supabase } from "../lib/supabase";
+
+type ChecklistItem = { id: string; label: string; done: boolean };
 
 type Job = {
   id: string;
@@ -16,6 +20,9 @@ type Job = {
   status: string;
   scheduled_start: string | null;
   notes: string | null;
+  checklist: ChecklistItem[] | null;
+  photos: string[] | null;
+  client_id: string;
 };
 
 export function CrewTodayScreen({
@@ -28,6 +35,7 @@ export function CrewTodayScreen({
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -40,7 +48,9 @@ export function CrewTodayScreen({
 
     const { data, error: qErr } = await supabase
       .from("jobs")
-      .select("id, address, status, scheduled_start, notes")
+      .select(
+        "id, address, status, scheduled_start, notes, checklist, photos, client_id",
+      )
       .contains("assignee_ids", [userId])
       .gte("scheduled_start", start.toISOString())
       .lte("scheduled_start", end.toISOString())
@@ -60,8 +70,6 @@ export function CrewTodayScreen({
     return () => {
       cancelled = true;
     };
-    // Initial + user change load; load is stable per userId.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
   }, [load]);
 
   async function handleSignOut() {
@@ -71,8 +79,59 @@ export function CrewTodayScreen({
 
   async function setStatus(jobId: string, status: string) {
     if (!supabase) return;
+    setBusyId(jobId);
     await supabase.from("jobs").update({ status }).eq("id", jobId);
+    setBusyId(null);
     await load();
+  }
+
+  async function toggleChecklist(job: Job, itemId: string) {
+    if (!supabase) return;
+    const checklist = (job.checklist ?? []).map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item,
+    );
+    setBusyId(job.id);
+    await supabase.from("jobs").update({ checklist }).eq("id", job.id);
+    setBusyId(null);
+    await load();
+  }
+
+  async function addPhoto(job: Job) {
+    if (!supabase) return;
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      setError("Camera permission required");
+      return;
+    }
+    const shot = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      base64: false,
+    });
+    if (shot.canceled || !shot.assets?.[0]) return;
+
+    const asset = shot.assets[0];
+    setBusyId(job.id);
+    try {
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
+      const ext = asset.mimeType?.includes("png") ? "png" : "jpg";
+      const path = `${job.client_id}/${job.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("job-photos")
+        .upload(path, blob, {
+          contentType: asset.mimeType ?? "image/jpeg",
+          upsert: false,
+        });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("job-photos").getPublicUrl(path);
+      const photos = [...(job.photos ?? []), pub.publicUrl];
+      await supabase.from("jobs").update({ photos }).eq("id", job.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (
@@ -111,15 +170,43 @@ export function CrewTodayScreen({
                 <Text style={styles.link}>Open in Maps</Text>
               </Pressable>
             ) : null}
+
+            {(item.checklist ?? []).map((c) => (
+              <Pressable
+                key={c.id}
+                style={styles.checkRow}
+                disabled={busyId === item.id}
+                onPress={() => void toggleChecklist(item, c.id)}
+              >
+                <Text style={styles.checkBox}>{c.done ? "✓" : "○"}</Text>
+                <Text style={styles.checkLabel}>{c.label}</Text>
+              </Pressable>
+            ))}
+
+            <View style={styles.photoRow}>
+              {(item.photos ?? []).slice(0, 4).map((url) => (
+                <Image key={url} source={{ uri: url }} style={styles.thumb} />
+              ))}
+            </View>
+
             <View style={styles.row}>
               <Pressable
                 style={styles.smallBtn}
+                disabled={busyId === item.id}
+                onPress={() => void addPhoto(item)}
+              >
+                <Text style={styles.smallBtnText}>Add photo</Text>
+              </Pressable>
+              <Pressable
+                style={styles.smallBtn}
+                disabled={busyId === item.id}
                 onPress={() => void setStatus(item.id, "en_route")}
               >
                 <Text style={styles.smallBtnText}>Start route</Text>
               </Pressable>
               <Pressable
                 style={styles.smallBtn}
+                disabled={busyId === item.id}
                 onPress={() => void setStatus(item.id, "complete")}
               >
                 <Text style={styles.smallBtnText}>Complete</Text>
@@ -153,7 +240,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardTitle: { fontSize: 16, fontWeight: "600", color: "#2b241c" },
-  row: { flexDirection: "row", gap: 8, marginTop: 6 },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2 },
+  checkBox: { width: 18, color: "#b5673b", fontSize: 14 },
+  checkLabel: { color: "#2b241c", fontSize: 13 },
+  photoRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
+  thumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: "#eee" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
   smallBtn: {
     backgroundColor: "#f3ebe1",
     borderRadius: 8,

@@ -29,8 +29,6 @@ Without it, photo upload returns a clear error.
 
 ## Still later
 
-- Editable templates / per-automation toggles  
 - Google Calendar (P2-T8) after Phase 1 dual-write gate  
-- Day/crew multi-resource calendar layouts  
 
-**Follow-on:** [phase3-quotes-billing.md](./phase3-quotes-billing.md) — quote follow-ups, rebooking, deposit e-sign, monthly snapshot, billing features.
+**Follow-on:** [phase3-quotes-billing.md](./phase3-quotes-billing.md) · [phase4-automations-mobile.md](./phase4-automations-mobile.md)
