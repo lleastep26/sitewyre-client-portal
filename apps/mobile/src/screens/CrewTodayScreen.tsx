@@ -28,9 +28,12 @@ type Job = {
 export function CrewTodayScreen({
   userId,
   onSignOut,
+  embedded = false,
 }: {
   userId: string;
   onSignOut: () => void;
+  /** Hide title/sign-out when nested under OwnerShell. */
+  embedded?: boolean;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,12 +139,14 @@ export function CrewTodayScreen({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Today</Text>
-        <Pressable onPress={handleSignOut}>
-          <Text style={styles.link}>Sign out</Text>
-        </Pressable>
-      </View>
+      {!embedded ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>Today</Text>
+          <Pressable onPress={handleSignOut}>
+            <Text style={styles.link}>Sign out</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading ? <ActivityIndicator color="#b5673b" /> : null}
       {error ? <Text style={styles.err}>{error}</Text> : null}

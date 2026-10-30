@@ -1,11 +1,12 @@
 # Sitewyre Portal — native apps (Phase 4)
 
-Expo TypeScript scaffold sharing the Sitewyre Supabase project (same `memberships` / `jobs` as the web portal).
+Expo TypeScript scaffold sharing the Sitewyre Supabase project (same `memberships` / `jobs` / `leads` / `messages` as the web portal).
 
 ## Screens (MVP)
 
 - Login — magic link email or phone OTP (Supabase Auth)
-- Crew today — assigned jobs for today, Maps link, Start route / Complete
+- **Owner / office** — tabs: Leads (read-only), Inbox (read-only), Today (assigned jobs)
+- **Crew** — Today only: checklist, camera photos, Start route / Complete, Maps
 
 ## Setup
 
@@ -27,7 +28,6 @@ Use the same Auth redirect / phone providers as the web portal. Add Supabase Aut
 
 ## Later
 
-- Job checklist / photos upload
-- Owner inbox + leads
+- Owner reply / compose from Inbox
 - Tap-to-pay (Stripe Terminal) after Connect
 - Store submission (P4-T5)
