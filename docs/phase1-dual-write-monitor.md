@@ -31,7 +31,9 @@ Do **not** remove systems POSTs until the gate passes and you intentionally cut 
 
 ## Housekeeping (one-time)
 - [ ] Revoke Supabase PATs pasted in chat  
-- [ ] Revoke n8n API key pasted in chat  
+- [ ] Revoke n8n API key pasted in chat (may already be revoked)  
 - [x] Stripe portal webhook URL → `https://sitewyre-client-portal.vercel.app/api/stripe/webhook`  
-- [ ] Prod magic-link login smoke (owner email)  
-- [ ] Prod SMS OTP smoke (if crew phone login is required)  
+- [x] Prod magic-link login smoke (owner email) — confirmed 2026-10-30  
+- [ ] Prod SMS OTP smoke (only if crew phone login is required)  
+
+**Phase 1 engineering wrap:** [phase1-wrap-review.md](./phase1-wrap-review.md) — stop before Phase 2.

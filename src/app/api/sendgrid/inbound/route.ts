@@ -10,14 +10,24 @@ export async function POST(request: Request) {
   const emailMatch = from.match(/<([^>]+)>/)?.[1] ?? from;
 
   const supabase = createAdminClient();
-  // Match client by owner email domain or site inbound alias later; for now first active client with matching business email
-  const { data: clients } = await supabase.from("clients").select("*").limit(50);
-  const client =
-    clients?.find((c) => to.toLowerCase().includes((c.site_key ?? "").toLowerCase())) ??
-    clients?.[0];
+  // Require an explicit site_key in the recipient address so mail cannot
+  // be attributed to an arbitrary "first" client.
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("*")
+    .not("site_key", "is", null)
+    .limit(100);
+  const toLower = to.toLowerCase();
+  const client = clients?.find((c) => {
+    const key = (c.site_key ?? "").toLowerCase();
+    return key.length > 0 && toLower.includes(key);
+  });
 
   if (!client) {
-    return Response.json({ ok: false }, { status: 404 });
+    return Response.json(
+      { ok: false, error: "Unknown inbound recipient (missing site_key)" },
+      { status: 404 },
+    );
   }
 
   const contact = await findOrCreateContact(supabase, {
