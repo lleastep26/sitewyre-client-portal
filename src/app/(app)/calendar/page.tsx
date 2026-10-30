@@ -1,24 +1,37 @@
+import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { requireMembership } from "@/lib/auth/session";
-import { createAppointment } from "./actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
+import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
+import { WeekCalendar } from "./week-calendar";
 
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ week?: string; new?: string }>;
 }) {
   const params = await searchParams;
-  const { supabase, client } = await requireMembership();
+  const { supabase, client, user } = await requireMembership();
   if (!client) return null;
+
+  const ownerId = client.user_id ?? user.id;
+  await ensureDefaultAvailability(supabase, client.id, ownerId).catch(
+    () => undefined,
+  );
+
+  const weekStart = params.week
+    ? startOfWeek(parseISO(params.week), { weekStartsOn: 1 })
+    : startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekEnd = addDays(weekStart, 7);
+  const prevWeek = format(addDays(weekStart, -7), "yyyy-MM-dd");
+  const nextWeek = format(addDays(weekStart, 7), "yyyy-MM-dd");
+  const weekParam = format(weekStart, "yyyy-MM-dd");
 
   const { data: appointments } = await supabase
     .from("appointments")
-    .select("*")
+    .select("id, title, start_at, end_at, status, assignee_ids")
     .eq("client_id", client.id)
-    .order("start_at", { ascending: true })
-    .limit(50);
+    .gte("start_at", weekStart.toISOString())
+    .lt("start_at", weekEnd.toISOString())
+    .order("start_at", { ascending: true });
 
   const { data: members } = await supabase
     .from("memberships")
@@ -26,53 +39,49 @@ export default async function CalendarPage({
     .eq("client_id", client.id);
 
   return (
-    <div className="space-y-4 px-4">
-      <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-copper">Calendar</p>
-        <h1 className="mt-1 font-display text-3xl">Schedule</h1>
-        <p className="mt-1 text-sm text-charcoal/60">
-          Day / week / crew views — {members?.length ?? 0} crew on account.
-        </p>
+    <div className="space-y-4 px-4 pb-8">
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-copper">
+            Calendar
+          </p>
+          <h1 className="mt-1 font-display text-3xl">Schedule</h1>
+          <p className="mt-1 text-sm text-charcoal/60">
+            Week view · {members?.length ?? 0} people on account
+          </p>
+        </div>
+        <a
+          href={`/calendar?week=${weekParam}&new=1`}
+          className="text-sm text-copper"
+        >
+          Add appointment →
+        </a>
       </header>
 
-      {params.new ? (
-        <form action={async (fd) => { await createAppointment(fd); }} className="space-y-2 rounded-xl border border-charcoal/10 bg-white p-4">
-          <Input name="title" placeholder="Title" required />
-          <Input name="start_at" type="datetime-local" required />
-          <Input name="end_at" type="datetime-local" required />
-          <Button type="submit" className="w-full">Book</Button>
-        </form>
-      ) : null}
+      <WeekCalendar
+        weekStartIso={weekStart.toISOString()}
+        prevHref={`/calendar?week=${prevWeek}`}
+        nextHref={`/calendar?week=${nextWeek}`}
+        appointments={appointments ?? []}
+        members={members ?? []}
+      />
 
-      <div className="space-y-2">
-        {(appointments ?? []).map((a) => (
-          <article key={a.id} className="rounded-lg border border-charcoal/10 bg-white p-3">
-            <p className="font-medium">{a.title ?? "Appointment"}</p>
-            <p className="text-xs text-charcoal/60">
-              {format(new Date(a.start_at), "EEE MMM d · h:mm a")} –{" "}
-              {format(new Date(a.end_at), "h:mm a")}
-            </p>
-            <p className="mt-1 text-xs text-charcoal/50">
-              Assignees: {a.assignee_ids?.length ?? 0} · {a.status}
-            </p>
-          </article>
-        ))}
-        {!appointments?.length ? (
-          <div className="rounded-xl border border-dashed border-charcoal/20 p-6 text-center">
-            <p className="font-display text-xl">Nothing scheduled</p>
-            <p className="mt-2 text-sm text-charcoal/60">
-              Share your booking page or add an appointment.
-            </p>
-            <a href="/calendar?new=1" className="mt-3 inline-block text-sm text-copper">
-              Add appointment →
-            </a>
-          </div>
-        ) : null}
-      </div>
+      {params.new === "1" ? (
+        <p className="text-xs text-charcoal/50">
+          Tap an empty hour on the grid to prefill a new appointment.
+        </p>
+      ) : null}
 
       {client.site_key ? (
         <p className="text-xs text-charcoal/50">
-          Public booking: /book/{client.site_key}
+          Public booking:{" "}
+          <a className="text-copper" href={`/book/${client.site_key}`}>
+            /book/{client.site_key}
+          </a>
+          {" · "}
+          <a className="text-copper" href="/settings">
+            Hours &amp; services
+          </a>
         </p>
       ) : null}
     </div>

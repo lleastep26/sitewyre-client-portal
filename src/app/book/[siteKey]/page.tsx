@@ -1,14 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { bookAppointment } from "./actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
+import { BookingWizard } from "./booking-wizard";
 
 export default async function BookingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ siteKey: string }>;
+  searchParams: Promise<{ booked?: string }>;
 }) {
   const { siteKey } = await params;
+  const { booked } = await searchParams;
   const supabase = createAdminClient();
   const { data: client } = await supabase
     .from("clients")
@@ -18,11 +20,39 @@ export default async function BookingPage({
 
   if (!client) return <main className="p-6">Booking page not found.</main>;
 
+  if (client.user_id) {
+    await ensureDefaultAvailability(supabase, client.id, client.user_id).catch(
+      () => undefined,
+    );
+  }
+
+  if (booked === "1") {
+    return (
+      <main className="mx-auto min-h-dvh max-w-lg bg-[radial-gradient(ellipse_at_top,_#fbf7f2,_#e8dccb)] px-4 py-10">
+        <p className="text-xs uppercase tracking-[0.22em] text-copper">Booked</p>
+        <h1 className="mt-2 font-display text-4xl text-charcoal">
+          You&apos;re on the calendar
+        </h1>
+        <p className="mt-3 text-sm text-charcoal/70">
+          {client.business_name} will confirm by text if SMS is set up. Thanks
+          for booking.
+        </p>
+        <a
+          href={`/book/${siteKey}`}
+          className="mt-8 inline-block text-sm text-copper"
+        >
+          Book another →
+        </a>
+      </main>
+    );
+  }
+
   const { data: services } = await supabase
     .from("services")
-    .select("*")
+    .select("id, name, duration_minutes, default_price")
     .eq("client_id", client.id)
-    .eq("bookable_online", true);
+    .eq("bookable_online", true)
+    .order("name");
 
   return (
     <main className="mx-auto min-h-dvh max-w-lg bg-[radial-gradient(ellipse_at_top,_#fbf7f2,_#e8dccb)] px-4 py-10">
@@ -31,31 +61,15 @@ export default async function BookingPage({
         {client.business_name}
       </h1>
       <p className="mt-2 text-sm text-charcoal/70">
-        Pick a service and time. Confirmation texts arrive automatically.
+        Pick a service, day, and open time. Confirmation texts arrive when SMS
+        is connected.
       </p>
 
-      <form action={bookAppointment.bind(null, siteKey)} className="mt-8 space-y-3">
-        <Input name="name" placeholder="Your name" required />
-        <Input name="phone" placeholder="Phone" required />
-        <Input name="email" type="email" placeholder="Email" />
-        <select
-          name="service_id"
-          className="h-11 w-full rounded-md border border-charcoal/20 bg-white px-3"
-          required
-        >
-          <option value="">Select a service</option>
-          {(services ?? []).map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-              {s.default_price != null ? ` · $${s.default_price}` : ""}
-            </option>
-          ))}
-        </select>
-        <Input name="start_at" type="datetime-local" required />
-        <Button type="submit" className="w-full">
-          Book
-        </Button>
-      </form>
+      <BookingWizard
+        siteKey={siteKey}
+        businessName={client.business_name ?? "us"}
+        services={services ?? []}
+      />
     </main>
   );
 }

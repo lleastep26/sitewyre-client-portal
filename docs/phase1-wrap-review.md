@@ -15,9 +15,9 @@
 | Lead dual-write (n8n → systems + portal) | **Live** |
 | Review dual-write (n8n → systems + portal) | **Live** |
 | Phase 1 **reliability gate** (2 weeks zero misses) | **In progress** (~through 2026-11-12) |
-| Phase 2 (booking pilot / calendar depth) | **Not started — STOP** |
+| Phase 2 scheduling MVP (week + slots + reminders; no Google / no cutover) | **Shipped in parallel** — see [phase2-scheduling-mvp.md](./phase2-scheduling-mvp.md) |
 
-Phase 1 **engineering** is done. What remains is **operational monitoring**, not more feature build, before Phase 2.
+Phase 1 **engineering** is done. What remains for cutover is **operational dual-write monitoring**. A scoped Phase 2 scheduling MVP may proceed in parallel; it must not touch n8n dual-write or live site webhooks.
 
 ## What’s live (inventory)
 
@@ -37,16 +37,20 @@ Phase 1 **engineering** is done. What remains is **operational monitoring**, not
 - Public settings resolves by `site_key`  
 - Stripe portal webhook endpoint enabled at prod URL  
 
-## STOP until monitoring gate passes (~Nov 12)
+## Gate until monitoring passes (~Nov 12)
 
-Do **not**:
+Do **not** (cutover):
 
-- Start Phase 2 booking/calendar/Google sync work as the next “cutover” step  
 - Remove systems POSTs from n8n  
 - Point client `js/main.js` lead/review webhooks only at the portal  
 - Retire sitewyre-systems `/portal`  
+- Treat Google Calendar sync or site cutover as unblocked by this wrap  
 
-Do:
+OK in parallel:
+
+- Phase 2 scheduling MVP (staff week calendar, public slots, reminders) — no dual-write or `js/main.js` changes  
+
+Do (monitoring):
 
 - Daily: n8n Executions → Portal Dual-Write nodes → `{ ok: true }`  
 - Log any systems-ok / portal-fail pairs  
@@ -60,7 +64,7 @@ Do:
 4. CRM RLS in `0003` lets any member (incl. crew) write many tables — tighten later.  
 5. Admin with no membership picks arbitrary first client — OK for now with 2 clients.  
 6. Pay page creates PaymentIntent but no Payment Element yet (Phase 3).  
-7. Calendar day/week/crew views not built (Phase 2).  
+7. Calendar week view + slots MVP shipped; day/crew layouts and Google sync still later.  
 8. Revoke any leftover Supabase/n8n tokens from chat if still active.
 
 ## Phase 1 follow-ups (still not Phase 2)
@@ -71,7 +75,8 @@ Do:
 4. Optional: tighten crew RLS write scope.  
 5. Token hygiene checklist.
 
-## Resume later
+## Resume later (cutover / deeper Phase 2)
 
 1. Confirm gate passed (or decide to keep n8n dual-write permanently).  
-2. Only then open Phase 2 pilot planning.  
+2. Only then plan live site webhook cutover and optional Google Calendar.  
+3. Scheduling MVP details: [phase2-scheduling-mvp.md](./phase2-scheduling-mvp.md).  
