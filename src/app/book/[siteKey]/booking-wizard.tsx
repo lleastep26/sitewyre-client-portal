@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { addDays, format, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,35 +40,25 @@ export function BookingWizard({
     return Array.from({ length: 14 }, (_, i) => addDays(start, i));
   }, []);
 
-  useEffect(() => {
-    if (!serviceId || !day) return;
-    let cancelled = false;
+  async function loadSlots(nextServiceId: string, nextDay: string) {
     setLoadingSlots(true);
     setError(null);
-    const from = day;
-    const to = day;
-    fetch(
-      `/api/public/slots?site_key=${encodeURIComponent(siteKey)}&service_id=${encodeURIComponent(serviceId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-    )
-      .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(body.error ?? "Unable to load slots");
-        if (!cancelled) {
-          setSlots(body.slots ?? []);
-          setSlot("");
-          setStep("slot");
-        }
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingSlots(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [siteKey, serviceId, day]);
+    setSlots([]);
+    setSlot("");
+    setStep("slot");
+    try {
+      const res = await fetch(
+        `/api/public/slots?site_key=${encodeURIComponent(siteKey)}&service_id=${encodeURIComponent(nextServiceId)}&from=${encodeURIComponent(nextDay)}&to=${encodeURIComponent(nextDay)}`,
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Unable to load slots");
+      setSlots(body.slots ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load slots");
+    } finally {
+      setLoadingSlots(false);
+    }
+  }
 
   function onBook(formData: FormData) {
     setError(null);
@@ -106,6 +96,7 @@ export function BookingWizard({
                 setServiceId(s.id);
                 setDay("");
                 setSlot("");
+                setSlots([]);
                 setStep("day");
               }}
             >
@@ -139,7 +130,10 @@ export function BookingWizard({
                   key={value}
                   type="button"
                   className="rounded-lg border border-charcoal/15 bg-white px-3 py-2 text-left text-sm hover:border-copper"
-                  onClick={() => setDay(value)}
+                  onClick={() => {
+                    setDay(value);
+                    void loadSlots(serviceId, value);
+                  }}
                 >
                   {format(d, "EEE MMM d")}
                 </button>
@@ -152,7 +146,8 @@ export function BookingWizard({
       {step === "slot" || step === "confirm" ? (
         <div className="space-y-3">
           <p className="text-sm font-medium text-charcoal">
-            {service?.name} · {day ? format(new Date(`${day}T12:00:00`), "EEE MMM d") : ""}
+            {service?.name} ·{" "}
+            {day ? format(new Date(`${day}T12:00:00`), "EEE MMM d") : ""}
           </p>
           {loadingSlots ? (
             <p className="text-sm text-charcoal/60">Loading times…</p>
@@ -190,7 +185,10 @@ export function BookingWizard({
       ) : null}
 
       {step === "confirm" && slot ? (
-        <form action={onBook} className="space-y-3 rounded-xl border border-charcoal/10 bg-white p-4">
+        <form
+          action={onBook}
+          className="space-y-3 rounded-xl border border-charcoal/10 bg-white p-4"
+        >
           <p className="text-sm text-charcoal/70">
             Confirm with {businessName} at{" "}
             {format(new Date(slot), "EEE MMM d · h:mm a")}
