@@ -4,6 +4,7 @@ import { resolveClient } from "@/lib/crm/resolve-client";
 import { leadIngestSchema } from "@/lib/validation/leads";
 import { json, options } from "@/lib/http/cors";
 import { inngest } from "@/lib/inngest/client";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import { normalizePhone } from "@/lib/utils";
 
 export function OPTIONS() {
@@ -26,6 +27,15 @@ export async function POST(request: Request) {
   const input = parsed.data;
   if (!input.site_key && !input.client_id && !input.domain && !input.business_name) {
     return json({ error: "Missing site_key, domain, or business_name" }, 400);
+  }
+
+  const turnstile = await verifyTurnstileToken(
+    input.turnstile_token,
+    request.headers.get("cf-connecting-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+  );
+  if (!turnstile.ok) {
+    return json({ error: turnstile.error ?? "Turnstile failed" }, 403);
   }
 
   try {

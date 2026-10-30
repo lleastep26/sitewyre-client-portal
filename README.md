@@ -35,6 +35,7 @@ npm run dev
 - [Schema baseline](docs/schema-baseline.md)
 - [External cutover (n8n + sites)](docs/external-cutover.md)
 - [Native apps](apps/mobile/README.md)
+- [Phase 4 mobile scaffold](docs/phase4-mobile-scaffold.md)
 
 ## Phase gates
 

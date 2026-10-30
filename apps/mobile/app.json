@@ -5,8 +5,19 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "platforms": ["ios", "android"],
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#fbf7f2"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sitewyre.portal"
+    },
+    "android": {
+      "package": "com.sitewyre.portal"
+    },
     "extra": {
-      "apiBaseUrl": "https://portal.sitewyre.com"
+      "apiBaseUrl": "https://sitewyre-client-portal.vercel.app"
     }
   }
 }

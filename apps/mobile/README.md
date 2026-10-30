@@ -1,17 +1,33 @@
 # Sitewyre Portal — native apps (Phase 4)
 
-Expo app sharing the same portal APIs.
+Expo TypeScript scaffold sharing the Sitewyre Supabase project (same `memberships` / `jobs` as the web portal).
 
-## Planned screens
-- Login (magic link / SMS OTP via Supabase Auth)
-- Crew today / job detail / checklist / photos
-- Owner inbox + leads
-- Tap-to-pay (Stripe Terminal) after Connect
+## Screens (MVP)
 
-## Bootstrap
+- Login — magic link email or phone OTP (Supabase Auth)
+- Crew today — assigned jobs for today, Maps link, Start route / Complete
+
+## Setup
+
 ```bash
-npx create-expo-app@latest sitewyre-portal-mobile -t expo-template-blank-typescript
+cd apps/mobile
+cp .env.example .env   # if present, or create .env
+npm install
+npx expo start
 ```
 
-Point `EXPO_PUBLIC_SUPABASE_URL` / anon key at the existing Sitewyre Supabase project.
-Use the same `memberships` roles; crew mode mirrors `/crew`.
+Env:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Use the same Auth redirect / phone providers as the web portal. Add Supabase Auth redirect URLs for Expo (`exp://…`) as needed.
+
+## Later
+
+- Job checklist / photos upload
+- Owner inbox + leads
+- Tap-to-pay (Stripe Terminal) after Connect
+- Store submission (P4-T5)

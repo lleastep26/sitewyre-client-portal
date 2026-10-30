@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveClient } from "@/lib/crm/resolve-client";
 import { reviewIngestSchema } from "@/lib/validation/leads";
 import { json, options } from "@/lib/http/cors";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
 
 export function OPTIONS() {
   return options();
@@ -21,6 +22,15 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
+  const turnstile = await verifyTurnstileToken(
+    input.turnstile_token,
+    request.headers.get("cf-connecting-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+  );
+  if (!turnstile.ok) {
+    return json({ error: turnstile.error ?? "Turnstile failed" }, 403);
+  }
+
   try {
     const supabase = createAdminClient();
     const client = await resolveClient(supabase, input);

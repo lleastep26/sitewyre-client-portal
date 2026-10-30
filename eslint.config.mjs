@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Expo app has its own toolchain; deps not installed at monorepo root.
+    "apps/mobile/**",
   ]),
 ]);
 

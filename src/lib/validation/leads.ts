@@ -29,6 +29,7 @@ export const reviewIngestSchema = z.object({
   email: z.string().optional(),
   feedback: z.string().optional(),
   routed_to_google: z.boolean().optional(),
+  turnstile_token: z.string().optional(),
 });
 
 export const createAccountSchema = z.object({
