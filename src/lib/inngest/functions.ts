@@ -291,6 +291,107 @@ export const invoiceReminder = inngest.createFunction(
   },
 );
 
+export const invoiceFollowUp = inngest.createFunction(
+  { id: "invoice-follow-up", triggers: [{ event: "portal/invoice.sent" }] },
+  async ({
+    event,
+    step,
+  }: {
+    event: { data: { invoiceId: string; clientId: string } };
+    step: Step;
+  }) => {
+    const { invoiceId, clientId } = event.data;
+
+    async function sendIfUnpaid(attempt: 1 | 2) {
+      const supabase = createAdminClient();
+      const { data: invoice } = await supabase
+        .from("invoices")
+        .select(
+          "id, number, status, total, amount_paid, public_token, contact_id",
+        )
+        .eq("id", invoiceId)
+        .maybeSingle();
+      if (!invoice) return { skipped: true as const, reason: "missing" };
+      if (invoice.status === "paid" || invoice.status === "void") {
+        return { skipped: true as const, reason: "closed" };
+      }
+      const remaining =
+        Number(invoice.total) - Number(invoice.amount_paid ?? 0);
+      if (remaining <= 0) {
+        return { skipped: true as const, reason: "balanced" };
+      }
+
+      const { data: client } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .single();
+      if (!client) return { skipped: true as const };
+
+      await respectQuietHours(
+        step,
+        client.timezone ?? "America/Chicago",
+        `quiet-invoice-${attempt}`,
+      );
+
+      let email: string | null = null;
+      let phone: string | null = null;
+      if (invoice.contact_id) {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("emails, phones")
+          .eq("id", invoice.contact_id)
+          .maybeSingle();
+        email = contact?.emails?.[0] ?? null;
+        phone = contact?.phones?.[0]
+          ? normalizePhone(contact.phones[0])
+          : null;
+      }
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const link = `${appUrl}/pay/${invoice.public_token}`;
+      const subject =
+        attempt === 1
+          ? `Reminder: invoice ${invoice.number}`
+          : `Past due: invoice ${invoice.number}`;
+      const body =
+        attempt === 1
+          ? `Friendly reminder from ${client.business_name}: $${remaining.toFixed(2)} due on invoice ${invoice.number}. Pay: ${link}`
+          : `Second reminder from ${client.business_name}: $${remaining.toFixed(2)} still due on ${invoice.number}. Pay: ${link}`;
+
+      if (email) {
+        await getEmailProvider().send({
+          to: email,
+          subject,
+          html: `<p>${body}</p><p><a href="${link}">${link}</a></p>`,
+          text: body,
+        });
+      }
+      if (phone && client.twilio_phone_number) {
+        await getSmsProvider().send({
+          to: phone,
+          from: client.twilio_phone_number,
+          body,
+        });
+      }
+
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "invoice_reminder",
+        status: email || phone ? "sent" : "skipped",
+        log: { invoiceId, attempt, remaining, email, phone },
+      });
+      return { ok: true as const, attempt };
+    }
+
+    await step.sleep("wait-3d", "3d");
+    await step.run("invoice-follow-up-1", () => sendIfUnpaid(1));
+    await step.sleep("wait-4d-more", "4d");
+    await step.run("invoice-follow-up-2", () => sendIfUnpaid(2));
+    return { ok: true };
+  },
+);
+
 export const quoteFollowUp = inngest.createFunction(
   { id: "quote-follow-up", triggers: [{ event: "portal/quote.sent" }] },
   async ({
@@ -530,6 +631,7 @@ export const functions = [
   missedCallTextBack,
   appointmentReminder,
   invoiceReminder,
+  invoiceFollowUp,
   quoteFollowUp,
   rebookingNudge,
   monthlyResultsEmail,

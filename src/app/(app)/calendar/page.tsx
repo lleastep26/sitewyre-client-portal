@@ -1,12 +1,13 @@
-import { addDays, format, parseISO, startOfWeek } from "date-fns";
+import { addDays, format, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { requireMembership } from "@/lib/auth/session";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { WeekCalendar } from "./week-calendar";
+import { DayCalendar } from "./day-calendar";
 
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; new?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; view?: string; new?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, client, user } = await requireMembership();
@@ -17,20 +18,29 @@ export default async function CalendarPage({
     () => undefined,
   );
 
+  const view = params.view === "day" ? "day" : "week";
+  const dayStart = params.day
+    ? startOfDay(parseISO(params.day))
+    : startOfDay(new Date());
   const weekStart = params.week
     ? startOfWeek(parseISO(params.week), { weekStartsOn: 1 })
-    : startOfWeek(new Date(), { weekStartsOn: 1 });
+    : startOfWeek(dayStart, { weekStartsOn: 1 });
   const weekEnd = addDays(weekStart, 7);
   const prevWeek = format(addDays(weekStart, -7), "yyyy-MM-dd");
   const nextWeek = format(addDays(weekStart, 7), "yyyy-MM-dd");
   const weekParam = format(weekStart, "yyyy-MM-dd");
+  const dayParam = format(dayStart, "yyyy-MM-dd");
+  const prevDay = format(addDays(dayStart, -1), "yyyy-MM-dd");
+  const nextDay = format(addDays(dayStart, 1), "yyyy-MM-dd");
+  const rangeStart = view === "day" ? dayStart : weekStart;
+  const rangeEnd = view === "day" ? addDays(dayStart, 1) : weekEnd;
 
   const { data: appointments } = await supabase
     .from("appointments")
     .select("id, title, start_at, end_at, status, assignee_ids")
     .eq("client_id", client.id)
-    .gte("start_at", weekStart.toISOString())
-    .lt("start_at", weekEnd.toISOString())
+    .gte("start_at", rangeStart.toISOString())
+    .lt("start_at", rangeEnd.toISOString())
     .order("start_at", { ascending: true });
 
   const { data: members } = await supabase
@@ -47,24 +57,54 @@ export default async function CalendarPage({
           </p>
           <h1 className="mt-1 font-display text-3xl">Schedule</h1>
           <p className="mt-1 text-sm text-charcoal/60">
-            Week view · {members?.length ?? 0} people on account
+            {view === "day" ? "Day · crew lanes" : "Week view"} ·{" "}
+            {members?.length ?? 0} people on account
           </p>
+          <div className="mt-2 flex gap-3 text-sm">
+            <a
+              href={`/calendar?view=week&week=${weekParam}`}
+              className={view === "week" ? "text-charcoal" : "text-copper"}
+            >
+              Week
+            </a>
+            <a
+              href={`/calendar?view=day&day=${dayParam}`}
+              className={view === "day" ? "text-charcoal" : "text-copper"}
+            >
+              Day
+            </a>
+          </div>
         </div>
         <a
-          href={`/calendar?week=${weekParam}&new=1`}
+          href={
+            view === "day"
+              ? `/calendar?view=day&day=${dayParam}&new=1`
+              : `/calendar?week=${weekParam}&new=1`
+          }
           className="text-sm text-copper"
         >
           Add appointment →
         </a>
       </header>
 
-      <WeekCalendar
-        weekStartIso={weekStart.toISOString()}
-        prevHref={`/calendar?week=${prevWeek}`}
-        nextHref={`/calendar?week=${nextWeek}`}
-        appointments={appointments ?? []}
-        members={members ?? []}
-      />
+      {view === "day" ? (
+        <DayCalendar
+          dayIso={dayStart.toISOString()}
+          prevHref={`/calendar?view=day&day=${prevDay}`}
+          nextHref={`/calendar?view=day&day=${nextDay}`}
+          weekHref={`/calendar?view=week&week=${weekParam}`}
+          appointments={appointments ?? []}
+          members={members ?? []}
+        />
+      ) : (
+        <WeekCalendar
+          weekStartIso={weekStart.toISOString()}
+          prevHref={`/calendar?week=${prevWeek}`}
+          nextHref={`/calendar?week=${nextWeek}`}
+          appointments={appointments ?? []}
+          members={members ?? []}
+        />
+      )}
 
       {params.new === "1" ? (
         <p className="text-xs text-charcoal/50">
@@ -77,10 +117,6 @@ export default async function CalendarPage({
           Public booking:{" "}
           <a className="text-copper" href={`/book/${client.site_key}`}>
             /book/{client.site_key}
-          </a>
-          {" · "}
-          <a className="text-copper" href="/settings">
-            Hours &amp; services
           </a>
         </p>
       ) : null}

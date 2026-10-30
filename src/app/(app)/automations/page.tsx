@@ -20,7 +20,11 @@ const BUILTIN = [
   },
   { key: "on_my_way", label: "5. On-my-way SMS", status: "live" },
   { key: "review_request", label: "6. Review request on complete", status: "live" },
-  { key: "invoice_reminder", label: "7. Invoice reminders", status: "partial" },
+  {
+    key: "invoice_reminder",
+    label: "7. Invoice reminders (3d + 7d if unpaid)",
+    status: "live",
+  },
   {
     key: "rebooking_nudge",
     label: "8. Rebooking nudge (14d after complete)",

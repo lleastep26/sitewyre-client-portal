@@ -100,19 +100,19 @@ export async function sendInvoice(invoiceId: string) {
     });
   }
 
-  const reminderTo = contact?.emails?.[0];
-  if (reminderTo) {
-    await inngest
-      .send({
-        name: "portal/invoice.reminder",
-        data: {
-          to: reminderTo,
-          subject: `Reminder: invoice ${invoice.number}`,
-          html: `<p>Payment due: <a href="${link}">${link}</a></p>`,
-        },
-      })
-      .catch(() => undefined);
-  }
+  await inngest
+    .send({
+      name: "portal/invoice.sent",
+      data: { invoiceId, clientId: client.id },
+    })
+    .catch(() => undefined);
+
+  await supabase.from("workflow_runs").insert({
+    client_id: client.id,
+    trigger: "invoice_sent",
+    status: "sent",
+    log: { invoiceId, link },
+  });
 
   revalidatePath("/invoices");
   return { ok: true, link };

@@ -46,9 +46,10 @@ export default async function PublicQuotePage({
   const signerName =
     typeof options.signer_name === "string" ? options.signer_name : null;
   const payUrl = depositToken ? `${getAppUrl()}/pay/${depositToken}` : null;
+  const nowIso = new Date().toISOString();
   const expired =
     quote.expires_at != null &&
-    new Date(quote.expires_at).getTime() < Date.now() &&
+    quote.expires_at < nowIso &&
     quote.status !== "accepted";
 
   return (
