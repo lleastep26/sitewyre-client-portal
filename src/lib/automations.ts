@@ -52,6 +52,12 @@ export const AUTOMATION_DEFS = [
     defaultTemplate:
       "Sorry we missed your call to {{business_name}}. How can we help?",
   },
+  {
+    key: "lead_sla_nudge",
+    label: "10. Speed-to-lead SLA nudge (15m, owner)",
+    defaultTemplate:
+      "SLA: {{first_name}} still needs a reply ({{business_name}}). {{phone}}",
+  },
 ] as const;
 
 export type AutomationKey = (typeof AUTOMATION_DEFS)[number]["key"];

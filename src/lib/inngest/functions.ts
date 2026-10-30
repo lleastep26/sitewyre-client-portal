@@ -9,6 +9,10 @@ import {
   getAutomationState,
 } from "@/lib/automations";
 import { sendPushToClient } from "@/lib/push/web-push";
+import {
+  SPEED_TO_LEAD_SLA_SLEEP,
+  shouldNudgeOwnerForSla,
+} from "@/lib/leads/speed-to-lead";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -185,6 +189,78 @@ export const leadUnansweredFollowUp = inngest.createFunction(
         trigger: "lead_unanswered_follow_up",
         status: "sent",
         log: { leadId, phone: to },
+      });
+    });
+
+    return { ok: true };
+  },
+);
+
+export const leadSlaNudge = inngest.createFunction(
+  {
+    id: "lead-sla-nudge",
+    triggers: [{ event: "portal/lead.created" }],
+  },
+  async ({ event, step }: { event: LeadEvent; step: Step }) => {
+    const { clientId, leadId, phone, name } = event.data;
+    await step.sleep("wait-sla", SPEED_TO_LEAD_SLA_SLEEP);
+
+    const supabase = createAdminClient();
+    const auto = await getAutomationState(supabase, clientId, "lead_sla_nudge");
+    if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id, first_response_at, phone, name")
+      .eq("id", leadId)
+      .maybeSingle();
+    if (!shouldNudgeOwnerForSla(lead)) {
+      return { skipped: true, reason: "answered_or_missing" };
+    }
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+    if (!client) return { skipped: true };
+
+    // Owner SLA alert — do not delay for quiet hours.
+    const firstName = (lead?.name ?? name).split(" ")[0] ?? name;
+    const leadPhone = lead?.phone || phone;
+    const body = applyTemplate(
+      auto.templateBody ??
+        "SLA: {{first_name}} still needs a reply ({{business_name}}). {{phone}}",
+      {
+        first_name: firstName,
+        business_name: client.business_name ?? "us",
+        phone: leadPhone,
+      },
+    );
+
+    if (client.phone) {
+      await step.run("sms-owner-sla", async () =>
+        getSmsProvider().send({
+          to: normalizePhone(client.phone!),
+          body,
+        }),
+      );
+    }
+
+    await step.run("push-owner-sla", async () =>
+      sendPushToClient(clientId, {
+        title: `Still needs reply — ${client.business_name ?? "Sitewyre"}`,
+        body: `${firstName} · ${leadPhone}`,
+        url: "/inbox",
+      }),
+    );
+
+    await step.run("log-sla-nudge", async () => {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "lead_sla_nudge",
+        status: "sent",
+        log: { leadId, phone: leadPhone },
       });
     });
 
@@ -707,6 +783,7 @@ export const healthMonitor = inngest.createFunction(
 export const functions = [
   leadAutoReply,
   leadUnansweredFollowUp,
+  leadSlaNudge,
   missedCallTextBack,
   appointmentReminder,
   invoiceReminder,

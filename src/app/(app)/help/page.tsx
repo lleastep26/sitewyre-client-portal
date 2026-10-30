@@ -9,7 +9,7 @@ import {
 const articles = [
   {
     title: "Reply to a new lead",
-    body: "Aim to reply within 15 minutes. Home shows Needs reply when a lead is still unanswered past that. Timer stops on first human reply (Inbox text, email, or note).",
+    body: "Aim to reply within 15 minutes. Home shows Needs reply when still unanswered; you'll also get an owner SMS/push at 15m if Automations → Speed-to-lead SLA is on. Timer stops on first human reply (Inbox text, email, or note).",
   },
   {
     title: "Move a lead through the pipeline",
