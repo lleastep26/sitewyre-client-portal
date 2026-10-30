@@ -16,6 +16,11 @@ import {
   ensureDefaultAvailability,
   weekdayLabel,
 } from "@/lib/scheduling/availability";
+import {
+  monthLabel,
+  monthStartIso,
+  type UsageCounts,
+} from "@/lib/billing/usage";
 
 function timeInputValue(t: unknown) {
   const raw = typeof t === "string" ? t : t == null ? "" : String(t);
@@ -24,28 +29,51 @@ function timeInputValue(t: unknown) {
 
 function BillingFeatures({
   features,
+  usage,
 }: {
   features: { feature: string; enabled: boolean }[];
+  usage: UsageCounts;
 }) {
-  if (!features.length) {
-    return (
-      <p className="mt-2 text-xs text-charcoal/50">
-        Feature list unavailable — defaults allow core CRM tools.
-      </p>
-    );
-  }
   return (
-    <ul className="mt-3 space-y-1 text-xs text-charcoal/70">
-      {features.map((row) => (
-        <li key={row.feature} className="flex justify-between gap-2">
-          <span>{row.feature.replaceAll("_", " ")}</span>
-          <span>{row.enabled ? "included" : "off"}</span>
-        </li>
-      ))}
-      <li className="pt-1 text-charcoal/50">
-        SMS / email overage meters: placeholder
-      </li>
-    </ul>
+    <div className="mt-3 space-y-3">
+      {features.length ? (
+        <ul className="space-y-1 text-xs text-charcoal/70">
+          {features.map((row) => (
+            <li key={row.feature} className="flex justify-between gap-2">
+              <span>{row.feature.replaceAll("_", " ")}</span>
+              <span>{row.enabled ? "included" : "off"}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-charcoal/50">
+          Feature list unavailable — defaults allow core CRM tools.
+        </p>
+      )}
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-charcoal/50">
+          Usage · {usage.monthLabel}
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-charcoal/70">
+          <li className="flex justify-between gap-2">
+            <span>Outbound SMS (inbox)</span>
+            <span>{usage.smsOutbound}</span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span>Outbound email (inbox)</span>
+            <span>{usage.emailOutbound}</span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span>Automation runs</span>
+            <span>{usage.workflowRuns}</span>
+          </li>
+        </ul>
+        <p className="mt-2 text-[11px] text-charcoal/45">
+          Overage billing not charged yet — counters are for visibility.
+          Automation SMS outside the inbox may not appear in SMS/email rows.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -71,11 +99,45 @@ export default async function SettingsPage({
     // Soft-fail: page should still render without seeded hours.
   }
 
-  const { data: planFeatureRows } = await supabase
-    .from("plan_features")
-    .select("feature, enabled")
-    .eq("plan", client.plan ?? "contractor_299")
-    .order("feature");
+  const usageMonthStart = monthStartIso();
+  const [
+    { data: planFeatureRows },
+    { count: smsOutboundCount },
+    { count: emailOutboundCount },
+    { count: workflowRunsCount },
+  ] = await Promise.all([
+    supabase
+      .from("plan_features")
+      .select("feature, enabled")
+      .eq("plan", client.plan ?? "contractor_299")
+      .order("feature"),
+    supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", client.id)
+      .eq("channel", "sms")
+      .eq("direction", "outbound")
+      .gte("created_at", usageMonthStart),
+    supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", client.id)
+      .eq("channel", "email")
+      .eq("direction", "outbound")
+      .gte("created_at", usageMonthStart),
+    supabase
+      .from("workflow_runs")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", client.id)
+      .gte("created_at", usageMonthStart),
+  ]);
+
+  const usage: UsageCounts = {
+    smsOutbound: smsOutboundCount ?? 0,
+    emailOutbound: emailOutboundCount ?? 0,
+    workflowRuns: workflowRunsCount ?? 0,
+    monthLabel: monthLabel(),
+  };
 
   const { data: availabilityRows, error: availabilityError } = await supabase
     .from("availability")
@@ -332,10 +394,10 @@ export default async function SettingsPage({
       <Card>
         <CardTitle>Billing</CardTitle>
         <CardDescription className="mt-1">
-          Plan: {client.plan ?? "contractor_299"} ($299/mo package). Usage
-          overages will appear here once limits are finalized.
+          Plan: {client.plan ?? "contractor_299"} ($299/mo package). Monthly
+          usage below; overage charges not enabled yet.
         </CardDescription>
-        <BillingFeatures features={planFeatureRows ?? []} />
+        <BillingFeatures features={planFeatureRows ?? []} usage={usage} />
       </Card>
 
       <Card>

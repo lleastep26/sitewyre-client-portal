@@ -11,6 +11,7 @@
 | **P3-T1 polish** | Public `/q/[token]` requires signer name; creates 20% deposit invoice + pay link |
 | **P3-T4** | Existing CSV + monthly snapshot SMS cron (`0 14 1 * *`) |
 | **P3-T6** | Settings Billing lists `plan_features`; `hasFeature` gates recurring jobs |
+| **Usage counters** | Settings Billing: month-to-date outbound SMS/email (inbox) + automation `workflow_runs` (no overage charge yet) |
 
 ## Guardrails
 
