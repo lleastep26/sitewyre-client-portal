@@ -5,12 +5,10 @@ import { requireMembership } from "@/lib/auth/session";
 import { applyTradePreset } from "@/lib/crm/apply-trade-preset";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 
-export async function updateSettings(formData: FormData) {
+export async function updateSettings(formData: FormData): Promise<void> {
   const { supabase, client, role } = await requireMembership();
-  if (!client) return { error: "No client" };
-  if (!["owner", "office", "sitewyre_admin"].includes(role)) {
-    return { error: "Not allowed" };
-  }
+  if (!client) return;
+  if (!["owner", "office", "sitewyre_admin"].includes(role)) return;
 
   const googleReviewUrl = String(formData.get("google_review_url") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "America/Chicago");
@@ -23,7 +21,7 @@ export async function updateSettings(formData: FormData) {
     verify_phone: Boolean(phone || client.twilio_phone_number),
   };
 
-  const { error } = await supabase
+  await supabase
     .from("clients")
     .update({
       google_review_url: googleReviewUrl || null,
@@ -35,10 +33,8 @@ export async function updateSettings(formData: FormData) {
     })
     .eq("id", client.id);
 
-  if (error) return { error: error.message };
   revalidatePath("/settings");
   revalidatePath("/");
-  return { ok: true };
 }
 
 export async function inviteCrew(formData: FormData) {
@@ -82,9 +78,9 @@ export async function inviteCrew(formData: FormData) {
   return { ok: true };
 }
 
-export async function reseedTradePreset() {
+export async function reseedTradePreset(): Promise<void> {
   const { supabase, client } = await requireMembership();
-  if (!client) return { error: "No client" };
+  if (!client) return;
   await applyTradePreset(supabase, client.id, client.trade ?? "other");
   const checklist = {
     ...((client.setup_checklist as Record<string, boolean> | null) ?? {}),
@@ -96,7 +92,6 @@ export async function reseedTradePreset() {
     .eq("id", client.id);
   revalidatePath("/settings");
   revalidatePath("/leads");
-  return { ok: true };
 }
 
 export async function seedAvailabilityIfNeeded() {

@@ -14,12 +14,12 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { ConnectStripeButton } from "./connect-stripe-button";
 import {
   ensureDefaultAvailability,
-  listAvailability,
   weekdayLabel,
 } from "@/lib/scheduling/availability";
 
-function timeInputValue(t: string) {
-  return t.slice(0, 5);
+function timeInputValue(t: unknown) {
+  const raw = typeof t === "string" ? t : t == null ? "" : String(t);
+  return raw.slice(0, 5) || "09:00";
 }
 
 export default async function SettingsPage({
@@ -29,15 +29,30 @@ export default async function SettingsPage({
 }) {
   const params = await searchParams;
   const { supabase, client, user } = await requireMembership();
-  if (!client) return null;
+  if (!client) {
+    return (
+      <div className="px-4 py-8 text-sm text-charcoal/70">
+        No business is linked to this account yet.
+      </div>
+    );
+  }
 
   const ownerId = client.user_id ?? user.id;
-  await ensureDefaultAvailability(supabase, client.id, ownerId).catch(
-    () => undefined,
-  );
-  const availability = await listAvailability(supabase, client.id).catch(
-    () => [],
-  );
+  try {
+    await ensureDefaultAvailability(supabase, client.id, ownerId);
+  } catch {
+    // Soft-fail: page should still render without seeded hours.
+  }
+
+  const { data: availabilityRows, error: availabilityError } = await supabase
+    .from("availability")
+    .select(
+      "id, weekday, start_time, end_time, buffer_minutes, min_notice_hours",
+    )
+    .eq("client_id", client.id)
+    .order("weekday", { ascending: true });
+
+  const availability = availabilityRows ?? [];
 
   const { data: services } = await supabase
     .from("services")
@@ -52,12 +67,18 @@ export default async function SettingsPage({
         <h1 className="mt-1 font-display text-3xl">Account</h1>
       </header>
 
+      {availabilityError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          Couldn’t load booking hours: {availabilityError.message}
+        </p>
+      ) : null}
+
       <Card>
         <CardTitle>Business</CardTitle>
         <CardDescription className="mt-1">
           Site key: <code className="text-xs">{client.site_key}</code>
         </CardDescription>
-        <form action={async (fd) => { await updateSettings(fd); }} className="mt-3 space-y-3">
+        <form action={updateSettings} className="mt-3 space-y-3">
           <div>
             <Label htmlFor="phone">Business phone</Label>
             <Input id="phone" name="phone" defaultValue={client.phone ?? ""} />
@@ -108,14 +129,14 @@ export default async function SettingsPage({
                 <input type="hidden" name="id" value={row.id} />
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Day</Label>
+                    <span className="text-sm font-medium text-charcoal">Day</span>
                     <select
                       name="weekday"
-                      defaultValue={row.weekday}
-                      className="h-11 w-full rounded-md border border-charcoal/20 bg-white px-3 text-sm"
+                      defaultValue={String(row.weekday)}
+                      className="mt-1 h-11 w-full rounded-md border border-charcoal/20 bg-white px-3 text-sm"
                     >
                       {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                        <option key={d} value={d}>
+                        <option key={d} value={String(d)}>
                           {weekdayLabel(d)}
                         </option>
                       ))}
@@ -123,7 +144,7 @@ export default async function SettingsPage({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label>Start</Label>
+                      <span className="text-sm font-medium text-charcoal">Start</span>
                       <Input
                         name="start_time"
                         type="time"
@@ -132,7 +153,7 @@ export default async function SettingsPage({
                       />
                     </div>
                     <div>
-                      <Label>End</Label>
+                      <span className="text-sm font-medium text-charcoal">End</span>
                       <Input
                         name="end_time"
                         type="time"
@@ -144,29 +165,27 @@ export default async function SettingsPage({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Buffer (min)</Label>
+                    <span className="text-sm font-medium text-charcoal">Buffer (min)</span>
                     <Input
                       name="buffer_minutes"
                       type="number"
                       min={0}
-                      defaultValue={row.buffer_minutes}
+                      defaultValue={String(row.buffer_minutes ?? 15)}
                     />
                   </div>
                   <div>
-                    <Label>Min notice (hrs)</Label>
+                    <span className="text-sm font-medium text-charcoal">Min notice (hrs)</span>
                     <Input
                       name="min_notice_hours"
                       type="number"
                       min={0}
-                      defaultValue={row.min_notice_hours}
+                      defaultValue={String(row.min_notice_hours ?? 2)}
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm" className="flex-1">
-                    Save
-                  </Button>
-                </div>
+                <Button type="submit" size="sm" className="w-full">
+                  Save
+                </Button>
               </form>
               <form action={deleteAvailability} className="mt-2">
                 <input type="hidden" name="id" value={row.id} />
@@ -177,16 +196,19 @@ export default async function SettingsPage({
             </li>
           ))}
         </ul>
-        <form action={upsertAvailability} className="mt-4 space-y-2 border-t border-charcoal/10 pt-3">
+        <form
+          action={upsertAvailability}
+          className="mt-4 space-y-2 border-t border-charcoal/10 pt-3"
+        >
           <p className="text-sm font-medium">Add hours</p>
           <div className="grid grid-cols-2 gap-2">
             <select
               name="weekday"
-              defaultValue={1}
+              defaultValue="1"
               className="h-11 w-full rounded-md border border-charcoal/20 bg-white px-3 text-sm"
             >
               {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                <option key={d} value={d}>
+                <option key={d} value={String(d)}>
                   {weekdayLabel(d)}
                 </option>
               ))}
@@ -229,7 +251,11 @@ export default async function SettingsPage({
                   name="bookable_online"
                   value={s.bookable_online ? "false" : "true"}
                 />
-                <Button type="submit" size="sm" variant={s.bookable_online ? "default" : "outline"}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant={s.bookable_online ? "default" : "outline"}
+                >
                   {s.bookable_online ? "Online" : "Hidden"}
                 </Button>
               </form>
@@ -263,7 +289,7 @@ export default async function SettingsPage({
         <CardDescription className="mt-1">
           Current trade: {client.trade ?? "other"}
         </CardDescription>
-        <form action={async () => { await reseedTradePreset(); }} className="mt-3">
+        <form action={reseedTradePreset} className="mt-3">
           <Button type="submit" variant="secondary" className="w-full">
             Reload pipeline & services
           </Button>
