@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { sendInboxMessage, suggestReply } from "@/app/(app)/inbox/actions";
+import {
+  sendInboxMessage,
+  suggestReply,
+  createSavedReply,
+  deleteSavedReply,
+} from "@/app/(app)/inbox/actions";
+import { applyReplyVariables } from "@/lib/inbox/variables";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 type Message = {
   id: string;
@@ -13,16 +20,28 @@ type Message = {
   created_at: string;
 };
 
+type SavedReply = {
+  id: string;
+  title: string;
+  body: string;
+};
+
 export function InboxThread({
   contactId,
+  contactName,
+  businessName,
   phone,
   email,
   messages,
+  savedReplies,
 }: {
   contactId: string;
+  contactName: string;
+  businessName: string;
   phone?: string | null;
   email?: string | null;
   messages: Message[];
+  savedReplies: SavedReply[];
 }) {
   const [body, setBody] = useState("");
   const [channel, setChannel] = useState<"sms" | "email" | "note">(
@@ -30,6 +49,19 @@ export function InboxThread({
   );
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+
+  const firstName = contactName.trim().split(/\s+/)[0] ?? contactName;
+
+  function insertReply(template: string) {
+    setBody(
+      applyReplyVariables(template, {
+        first_name: firstName,
+        business_name: businessName,
+        phone: phone ?? "",
+      }),
+    );
+  }
 
   return (
     <div className="flex h-[70dvh] flex-col">
@@ -51,6 +83,58 @@ export function InboxThread({
         ))}
       </div>
       <div className="border-t border-charcoal/10 bg-white/90 p-3">
+        <div className="mb-2 flex flex-wrap gap-1">
+          {savedReplies.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="rounded-md bg-charcoal/5 px-2 py-1 text-[11px] text-charcoal/80"
+              onClick={() => insertReply(r.body)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (confirm(`Delete saved reply “${r.title}”?`)) {
+                  start(() => {
+                    void deleteSavedReply(r.id);
+                  });
+                }
+              }}
+              title="Click to insert · right-click to delete"
+            >
+              {r.title}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-[11px] text-copper"
+            onClick={() => setShowNew((v) => !v)}
+          >
+            + Save
+          </button>
+        </div>
+
+        {showNew ? (
+          <form
+            className="mb-2 space-y-1 rounded-md border border-charcoal/10 p-2"
+            action={(fd) => {
+              start(async () => {
+                const res = await createSavedReply(fd);
+                if (res.error) setError(res.error);
+                else setShowNew(false);
+              });
+            }}
+          >
+            <Input name="title" placeholder="Title" required />
+            <Textarea
+              name="body"
+              placeholder="Body — use {{first_name}} {{business_name}}"
+              required
+            />
+            <Button type="submit" size="sm" disabled={pending}>
+              Save reply
+            </Button>
+          </form>
+        ) : null}
+
         <div className="mb-2 flex gap-2">
           {(["sms", "email", "note"] as const).map((c) => (
             <button

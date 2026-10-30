@@ -259,6 +259,14 @@ export type Database = {
         template_body: string | null;
         updated_at: string | null;
       }>;
+      saved_replies: TableDef<{
+        id: string;
+        client_id: string;
+        title: string;
+        body: string;
+        created_at: string;
+        updated_at: string | null;
+      }>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

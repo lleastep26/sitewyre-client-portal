@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
 import { InboxThread } from "@/components/inbox/thread";
+import { ensureSavedReplies } from "./actions";
 
 export default async function InboxPage({
   searchParams,
@@ -10,6 +11,8 @@ export default async function InboxPage({
   const params = await searchParams;
   const { supabase, client } = await requireMembership();
   if (!client) return null;
+
+  await ensureSavedReplies().catch(() => undefined);
 
   const { data: contacts } = await supabase
     .from("contacts")
@@ -21,15 +24,22 @@ export default async function InboxPage({
   const activeId = params.contact ?? contacts?.[0]?.id;
   const active = contacts?.find((c) => c.id === activeId) ?? null;
 
-  const { data: messages } = activeId
-    ? await supabase
-        .from("messages")
-        .select("*")
-        .eq("client_id", client.id)
-        .eq("contact_id", activeId)
-        .order("created_at", { ascending: true })
-        .limit(200)
-    : { data: [] };
+  const [{ data: messages }, { data: savedReplies }] = await Promise.all([
+    activeId
+      ? supabase
+          .from("messages")
+          .select("*")
+          .eq("client_id", client.id)
+          .eq("contact_id", activeId)
+          .order("created_at", { ascending: true })
+          .limit(200)
+      : Promise.resolve({ data: [] as never[] }),
+    supabase
+      .from("saved_replies")
+      .select("id, title, body")
+      .eq("client_id", client.id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   return (
     <div>
@@ -65,9 +75,12 @@ export default async function InboxPage({
           {active ? (
             <InboxThread
               contactId={active.id}
+              contactName={active.name}
+              businessName={client.business_name ?? "us"}
               phone={active.phones?.[0]}
               email={active.emails?.[0]}
               messages={messages ?? []}
+              savedReplies={savedReplies ?? []}
             />
           ) : null}
         </div>

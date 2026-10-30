@@ -8,6 +8,7 @@ import {
   applyTemplate,
   getAutomationState,
 } from "@/lib/automations";
+import { sendPushToClient } from "@/lib/push/web-push";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -111,6 +112,14 @@ export const leadAutoReply = inngest.createFunction(
         log: { leadId, phone, email },
       });
     });
+
+    await step.run("push-notify", async () =>
+      sendPushToClient(clientId, {
+        title: `New lead — ${client.business_name ?? "Sitewyre"}`,
+        body: `${name} · ${phone}`,
+        url: "/leads",
+      }),
+    );
 
     return { ok: true };
   },
