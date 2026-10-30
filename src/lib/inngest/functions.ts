@@ -7,6 +7,7 @@ import { nextSendableAt } from "@/lib/scheduling/quiet-hours";
 import {
   applyTemplate,
   getAutomationState,
+  getDefaultTemplate,
 } from "@/lib/automations";
 import { sendPushToClient } from "@/lib/push/web-push";
 import {
@@ -430,10 +431,12 @@ export const invoiceFollowUp = inngest.createFunction(
     step: Step;
   }) => {
     const { invoiceId, clientId } = event.data;
+    let invoiceTemplate: string | null = null;
     {
       const supabase = createAdminClient();
       const auto = await getAutomationState(supabase, clientId, "invoice_reminder");
       if (!auto.enabled) return { skipped: true, reason: "disabled" };
+      invoiceTemplate = auto.templateBody;
     }
 
     async function sendIfUnpaid(attempt: 1 | 2) {
@@ -484,14 +487,22 @@ export const invoiceFollowUp = inngest.createFunction(
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       const link = `${appUrl}/pay/${invoice.public_token}`;
+      const amount = remaining.toFixed(2);
       const subject =
         attempt === 1
           ? `Reminder: invoice ${invoice.number}`
           : `Past due: invoice ${invoice.number}`;
-      const body =
+      const fallback =
         attempt === 1
-          ? `Friendly reminder from ${client.business_name}: $${remaining.toFixed(2)} due on invoice ${invoice.number}. Pay: ${link}`
-          : `Second reminder from ${client.business_name}: $${remaining.toFixed(2)} still due on ${invoice.number}. Pay: ${link}`;
+          ? (getDefaultTemplate("invoice_reminder") ??
+            `Friendly reminder from {{business_name}}: \${{amount}} due on invoice {{invoice_number}}. Pay: {{link}}`)
+          : `Second reminder from {{business_name}}: \${{amount}} still due on {{invoice_number}}. Pay: {{link}}`;
+      const body = applyTemplate(invoiceTemplate ?? fallback, {
+        business_name: client.business_name ?? "us",
+        amount,
+        invoice_number: String(invoice.number ?? ""),
+        link,
+      });
 
       if (email) {
         await getEmailProvider().send({
@@ -536,10 +547,12 @@ export const quoteFollowUp = inngest.createFunction(
     step: Step;
   }) => {
     const { quoteId, clientId } = event.data;
+    let quoteTemplate: string | null = null;
     {
       const supabase = createAdminClient();
       const auto = await getAutomationState(supabase, clientId, "quote_follow_up");
       if (!auto.enabled) return { skipped: true, reason: "disabled" };
+      quoteTemplate = auto.templateBody;
     }
 
     async function sendAttempt(attempt: 1 | 2) {
@@ -583,10 +596,16 @@ export const quoteFollowUp = inngest.createFunction(
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       const link = `${appUrl}/q/${quote.public_token}`;
-      const body =
+      const fallback =
         attempt === 1
-          ? `Friendly reminder: your quote ${quote.number} from ${client.business_name} is ready: ${link}`
-          : `Last reminder: quote ${quote.number} from ${client.business_name} expires soon: ${link}`;
+          ? (getDefaultTemplate("quote_follow_up") ??
+            "Friendly reminder: your quote {{quote_number}} from {{business_name}} is ready: {{link}}")
+          : "Last reminder: quote {{quote_number}} from {{business_name}} expires soon: {{link}}";
+      const body = applyTemplate(quoteTemplate ?? fallback, {
+        quote_number: String(quote.number ?? ""),
+        business_name: client.business_name ?? "us",
+        link,
+      });
 
       if (phone && client.twilio_phone_number) {
         await getSmsProvider().send({

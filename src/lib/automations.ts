@@ -17,12 +17,14 @@ export const AUTOMATION_DEFS = [
   {
     key: "quote_follow_up",
     label: "3. Quote follow-ups (3d + 7d)",
-    defaultTemplate: null,
+    defaultTemplate:
+      "Friendly reminder: your quote {{quote_number}} from {{business_name}} is ready: {{link}}",
   },
   {
     key: "appointment_reminder",
     label: "4. Appointment confirm + 24h + 2h",
-    defaultTemplate: null,
+    defaultTemplate:
+      "You're booked with {{business_name}} on {{when}}. Reply C to confirm.",
   },
   {
     key: "on_my_way",
@@ -38,7 +40,8 @@ export const AUTOMATION_DEFS = [
   {
     key: "invoice_reminder",
     label: "7. Invoice reminders (3d + 7d if unpaid)",
-    defaultTemplate: null,
+    defaultTemplate:
+      "Friendly reminder from {{business_name}}: ${{amount}} due on invoice {{invoice_number}}. Pay: {{link}}",
   },
   {
     key: "rebooking_nudge",
@@ -61,6 +64,11 @@ export const AUTOMATION_DEFS = [
 ] as const;
 
 export type AutomationKey = (typeof AUTOMATION_DEFS)[number]["key"];
+
+export function getDefaultTemplate(key: string): string | null {
+  const def = AUTOMATION_DEFS.find((d) => d.key === key);
+  return def?.defaultTemplate ?? null;
+}
 
 export async function ensureClientAutomations(
   supabase: SupabaseClient<Database>,

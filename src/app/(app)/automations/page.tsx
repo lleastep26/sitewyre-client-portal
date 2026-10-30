@@ -75,7 +75,7 @@ export default async function AutomationsPage() {
                     defaultValue={template}
                     rows={2}
                     className="w-full rounded-md border border-charcoal/15 px-3 py-2 text-xs"
-                    placeholder="SMS / email template ({{first_name}}, {{business_name}})"
+                    placeholder="Template vars: {{first_name}}, {{business_name}}, {{when}}, {{quote_number}}, {{invoice_number}}, {{amount}}, {{link}}, {{phone}}"
                   />
                   <Button type="submit" size="sm" variant="secondary">
                     Save template

@@ -1,9 +1,20 @@
 import { inngest } from "@/lib/inngest/client";
 import { normalizePhone } from "@/lib/utils";
 import { nextSendableAt } from "./quiet-hours";
+import {
+  applyTemplate,
+  getAutomationState,
+  getDefaultTemplate,
+} from "@/lib/automations";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+const REMINDER_24H_DEFAULT =
+  "Reminder: {{title}} tomorrow with {{business_name}} at {{when}}.";
+const REMINDER_2H_DEFAULT =
+  "Heads up: {{title}} with {{business_name}} in about 2 hours ({{when}}).";
 
 async function sendOrSchedule(opts: {
   to: string;
@@ -37,6 +48,7 @@ async function sendOrSchedule(opts: {
 /**
  * Confirmation now (or after quiet hours), ~24h-before and ~2h-before
  * when those targets are still in the future. Soft-fails without Twilio.
+ * Confirmation SMS uses Automations → appointment_reminder template.
  */
 export async function enqueueAppointmentSms(opts: {
   to: string | null | undefined;
@@ -61,10 +73,33 @@ export async function enqueueAppointmentSms(opts: {
     minute: "2-digit",
   });
 
+  const vars = {
+    business_name: opts.businessName,
+    title: opts.title,
+    when,
+  };
+
+  let confirmTemplate =
+    getDefaultTemplate("appointment_reminder") ??
+    "You're booked with {{business_name}} on {{when}}. Reply C to confirm.";
+  if (opts.clientId) {
+    try {
+      const supabase = createAdminClient();
+      const auto = await getAutomationState(
+        supabase,
+        opts.clientId,
+        "appointment_reminder",
+      );
+      if (auto.templateBody) confirmTemplate = auto.templateBody;
+    } catch {
+      // Soft-fail: keep default confirmation copy.
+    }
+  }
+
   await sendOrSchedule({
     to,
     from,
-    body: `You're booked with ${opts.businessName} on ${when}. Reply C to confirm.`,
+    body: applyTemplate(confirmTemplate, vars),
     clientId: opts.clientId,
     trigger: "appointment_confirmation",
     at: new Date(),
@@ -78,7 +113,7 @@ export async function enqueueAppointmentSms(opts: {
     await sendOrSchedule({
       to,
       from,
-      body: `Reminder: ${opts.title} tomorrow with ${opts.businessName} at ${when}.`,
+      body: applyTemplate(REMINDER_24H_DEFAULT, vars),
       clientId: opts.clientId,
       trigger: "appointment_reminder_24h",
       at: new Date(at24),
@@ -92,7 +127,7 @@ export async function enqueueAppointmentSms(opts: {
     await sendOrSchedule({
       to,
       from,
-      body: `Heads up: ${opts.title} with ${opts.businessName} in about 2 hours (${when}).`,
+      body: applyTemplate(REMINDER_2H_DEFAULT, vars),
       clientId: opts.clientId,
       trigger: "appointment_reminder_2h",
       at: new Date(at2h),
