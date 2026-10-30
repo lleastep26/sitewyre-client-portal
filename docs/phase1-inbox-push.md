@@ -6,8 +6,9 @@
 
 | Item | Behavior |
 |------|----------|
-| **Saved replies** | Inbox chips with `{{first_name}}` / `{{business_name}}`; add / right-click delete |
-| **PWA push** | Registers SW, asks permission, stores subscription; new-lead Inngest sends web push when VAPID configured |
+| **Saved replies** | Inbox chips with `{{first_name}}` / `{{business_name}}` / `{{booking_link}}` / `{{review_link}}`; add / right-click delete |
+| **PWA push** | Registers SW; push on new lead, inbound SMS/email, public/staff bookings when VAPID configured |
+| **Reply C** | Inbound SMS `C` / `CONFIRM` / `YES` confirms the contact's next upcoming appointment |
 
 ## Env (optional push)
 

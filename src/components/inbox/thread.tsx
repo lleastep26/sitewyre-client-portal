@@ -32,6 +32,8 @@ export function InboxThread({
   businessName,
   phone,
   email,
+  bookingLink,
+  reviewLink,
   messages,
   savedReplies,
 }: {
@@ -40,6 +42,8 @@ export function InboxThread({
   businessName: string;
   phone?: string | null;
   email?: string | null;
+  bookingLink?: string | null;
+  reviewLink?: string | null;
   messages: Message[];
   savedReplies: SavedReply[];
 }) {
@@ -59,6 +63,8 @@ export function InboxThread({
         first_name: firstName,
         business_name: businessName,
         phone: phone ?? "",
+        booking_link: bookingLink ?? "",
+        review_link: reviewLink ?? "",
       }),
     );
   }
@@ -126,7 +132,7 @@ export function InboxThread({
             <Input name="title" placeholder="Title" required />
             <Textarea
               name="body"
-              placeholder="Body — use {{first_name}} {{business_name}}"
+              placeholder="Body — {{first_name}} {{business_name}} {{booking_link}} {{review_link}}"
               required
             />
             <Button type="submit" size="sm" disabled={pending}>

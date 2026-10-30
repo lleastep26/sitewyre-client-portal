@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth/session";
 import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
+import { sendPushToClient } from "@/lib/push/web-push";
 
 export async function createAppointment(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
@@ -46,6 +47,12 @@ export async function createAppointment(formData: FormData) {
     clientId: client.id,
     timeZone: client.timezone,
   });
+
+  await sendPushToClient(client.id, {
+    title: `Appointment added — ${client.business_name ?? "Sitewyre"}`,
+    body: `${title} · ${startAt.toLocaleString()}`,
+    url: "/calendar",
+  }).catch(() => undefined);
 
   revalidatePath("/calendar");
   return { ok: true, id: data.id };

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
 import { InboxThread } from "@/components/inbox/thread";
+import { getAppUrl } from "@/lib/supabase/env";
 import { ensureSavedReplies } from "./actions";
 
 export default async function InboxPage({
@@ -79,6 +80,12 @@ export default async function InboxPage({
               businessName={client.business_name ?? "us"}
               phone={active.phones?.[0]}
               email={active.emails?.[0]}
+              bookingLink={
+                client.site_key
+                  ? `${getAppUrl()}/book/${client.site_key}`
+                  : null
+              }
+              reviewLink={client.google_review_url}
               messages={messages ?? []}
               savedReplies={savedReplies ?? []}
             />

@@ -10,4 +10,13 @@ describe("applyReplyVariables", () => {
       }),
     ).toBe("Hi Sam from Acme");
   });
+
+  it("fills booking and review links", () => {
+    expect(
+      applyReplyVariables("Book {{booking_link}} review {{review_link}}", {
+        booking_link: "https://x/book/a",
+        review_link: "https://g.page/r",
+      }),
+    ).toBe("Book https://x/book/a review https://g.page/r");
+  });
 });

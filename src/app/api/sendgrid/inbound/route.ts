@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findOrCreateContact } from "@/lib/crm/contacts";
+import { sendPushToClient } from "@/lib/push/web-push";
 
 export async function POST(request: Request) {
   const form = await request.formData();
@@ -38,14 +39,21 @@ export async function POST(request: Request) {
     source: "email",
   });
 
+  const body = subject ? `${subject}\n\n${text}` : text;
   await supabase.from("messages").insert({
     client_id: client.id,
     contact_id: contact.id,
     channel: "email",
     direction: "inbound",
-    body: subject ? `${subject}\n\n${text}` : text,
+    body,
     status: "received",
   });
+
+  await sendPushToClient(client.id, {
+    title: `Email — ${client.business_name ?? "Sitewyre"}`,
+    body: (subject || text).slice(0, 120),
+    url: `/inbox?contact=${contact.id}`,
+  }).catch(() => undefined);
 
   return Response.json({ ok: true });
 }

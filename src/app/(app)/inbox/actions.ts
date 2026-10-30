@@ -11,7 +11,11 @@ const DEFAULT_REPLIES = [
   },
   {
     title: "Schedule link",
-    body: "Hi {{first_name}}, you can book a time with {{business_name}} here — reply if you need help picking a slot.",
+    body: "Hi {{first_name}}, book with {{business_name}} here: {{booking_link}}",
+  },
+  {
+    title: "Review ask",
+    body: "Hi {{first_name}}, thanks again from {{business_name}} — leave a review if you can: {{review_link}}",
   },
   {
     title: "On my way",

@@ -6,6 +6,7 @@ import { findOrCreateContact } from "@/lib/crm/contacts";
 import { isSlotAvailable } from "@/lib/scheduling/slots";
 import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
+import { sendPushToClient } from "@/lib/push/web-push";
 
 export async function bookAppointment(siteKey: string, formData: FormData) {
   const supabase = createAdminClient();
@@ -113,6 +114,12 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     clientId: client.id,
     timeZone: client.timezone,
   });
+
+  await sendPushToClient(client.id, {
+    title: `New booking — ${client.business_name ?? "Sitewyre"}`,
+    body: `${name} · ${title} · ${start.toLocaleString()}`,
+    url: "/calendar",
+  }).catch(() => undefined);
 
   redirect(`/book/${siteKey}?booked=1`);
 }

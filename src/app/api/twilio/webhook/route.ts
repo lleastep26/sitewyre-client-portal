@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findOrCreateContact } from "@/lib/crm/contacts";
 import { inngest } from "@/lib/inngest/client";
+import { sendPushToClient } from "@/lib/push/web-push";
 import { normalizePhone } from "@/lib/utils";
 import twilio from "twilio";
 
@@ -82,6 +83,39 @@ export async function POST(request: Request) {
       // acknowledged by carrier templates typically
     }
 
+    // Reply C / CONFIRM → mark next upcoming appointment confirmed
+    if (upper === "C" || upper === "CONFIRM" || upper === "YES") {
+      const nowIso = new Date().toISOString();
+      const { data: nextAppt } = await supabase
+        .from("appointments")
+        .select("id")
+        .eq("client_id", client.id)
+        .eq("contact_id", contact.id)
+        .neq("status", "cancelled")
+        .neq("status", "completed")
+        .gte("start_at", nowIso)
+        .order("start_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (nextAppt) {
+        await supabase
+          .from("appointments")
+          .update({ status: "confirmed" })
+          .eq("id", nextAppt.id);
+        await supabase.from("activities").insert({
+          client_id: client.id,
+          contact_id: contact.id,
+          type: "appointment_confirmed_sms",
+          payload: { appointmentId: nextAppt.id, body },
+        });
+        await sendPushToClient(client.id, {
+          title: `${client.business_name ?? "Booking"} confirmed`,
+          body: `${contact.name || from} replied ${upper}`,
+          url: "/calendar",
+        }).catch(() => undefined);
+      }
+    }
+
     await supabase.from("messages").insert({
       client_id: client.id,
       contact_id: contact.id,
@@ -98,6 +132,12 @@ export async function POST(request: Request) {
       type: "sms_inbound",
       payload: { body, messageSid },
     });
+
+    await sendPushToClient(client.id, {
+      title: `SMS — ${client.business_name ?? "Sitewyre"}`,
+      body: body.slice(0, 120),
+      url: `/inbox?contact=${contact.id}`,
+    }).catch(() => undefined);
   }
 
   return new Response("<Response></Response>", {
