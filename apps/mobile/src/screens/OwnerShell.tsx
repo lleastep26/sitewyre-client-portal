@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { MembershipInfo } from "../lib/membership";
 import { signOut } from "../lib/supabase";
@@ -18,11 +18,23 @@ export function OwnerShell({
   onSignOut: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("leads");
+  const [inboxFocusContactId, setInboxFocusContactId] = useState<string | null>(
+    null,
+  );
 
   async function handleSignOut() {
     await signOut();
     onSignOut();
   }
+
+  const openInboxForContact = useCallback((contactId: string) => {
+    setInboxFocusContactId(contactId);
+    setTab("inbox");
+  }, []);
+
+  const clearInboxFocus = useCallback(() => {
+    setInboxFocusContactId(null);
+  }, []);
 
   return (
     <View style={styles.wrap}>
@@ -46,7 +58,14 @@ export function OwnerShell({
             ["today", "Today"],
           ] as const
         ).map(([id, label]) => (
-          <Pressable key={id} onPress={() => setTab(id)} style={styles.tabBtn}>
+          <Pressable
+            key={id}
+            onPress={() => {
+              if (id !== "inbox") setInboxFocusContactId(null);
+              setTab(id);
+            }}
+            style={styles.tabBtn}
+          >
             <Text style={tab === id ? styles.tabOn : styles.tab}>{label}</Text>
           </Pressable>
         ))}
@@ -54,10 +73,17 @@ export function OwnerShell({
 
       <View style={styles.body}>
         {tab === "leads" ? (
-          <OwnerLeadsScreen clientId={membership.clientId} />
+          <OwnerLeadsScreen
+            clientId={membership.clientId}
+            onReply={openInboxForContact}
+          />
         ) : null}
         {tab === "inbox" ? (
-          <OwnerInboxScreen clientId={membership.clientId} />
+          <OwnerInboxScreen
+            clientId={membership.clientId}
+            focusContactId={inboxFocusContactId}
+            onFocusConsumed={clearInboxFocus}
+          />
         ) : null}
         {tab === "today" ? (
           <CrewTodayScreen

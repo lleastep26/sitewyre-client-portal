@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -14,11 +15,18 @@ type Lead = {
   name: string;
   phone: string;
   message: string;
+  contact_id: string | null;
   first_response_at: string | null;
   created_at: string;
 };
 
-export function OwnerLeadsScreen({ clientId }: { clientId: string }) {
+export function OwnerLeadsScreen({
+  clientId,
+  onReply,
+}: {
+  clientId: string;
+  onReply?: (contactId: string) => void;
+}) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +37,9 @@ export function OwnerLeadsScreen({ clientId }: { clientId: string }) {
     setError(null);
     const { data, error: qErr } = await supabase
       .from("leads")
-      .select("id, name, phone, message, first_response_at, created_at")
+      .select(
+        "id, name, phone, message, contact_id, first_response_at, created_at",
+      )
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(40);
@@ -41,6 +51,29 @@ export function OwnerLeadsScreen({ clientId }: { clientId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+    const channel = client
+      .channel(`leads:${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "leads",
+          filter: `client_id=eq.${clientId}`,
+        },
+        () => {
+          void load();
+        },
+      )
+      .subscribe();
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [clientId, load]);
 
   return (
     <View style={styles.wrap}>
@@ -75,6 +108,28 @@ export function OwnerLeadsScreen({ clientId }: { clientId: string }) {
             <Text style={styles.meta}>
               {new Date(item.created_at).toLocaleString()}
             </Text>
+            <View style={styles.actions}>
+              {item.phone ? (
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={() =>
+                    void Linking.openURL(
+                      `tel:${item.phone.replace(/[^\d+]/g, "")}`,
+                    )
+                  }
+                >
+                  <Text style={styles.actionText}>Call</Text>
+                </Pressable>
+              ) : null}
+              {item.contact_id && onReply ? (
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={() => onReply(item.contact_id!)}
+                >
+                  <Text style={styles.actionText}>Reply SMS</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         )}
       />
@@ -121,4 +176,12 @@ const styles = StyleSheet.create({
   },
   body: { color: "#2b241c", fontSize: 13, marginTop: 2 },
   meta: { color: "#9a8f82", fontSize: 11, marginTop: 4 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  actionBtn: {
+    backgroundColor: "#f3ebe1",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  actionText: { color: "#2b241c", fontSize: 13, fontWeight: "600" },
 });

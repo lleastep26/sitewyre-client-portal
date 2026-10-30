@@ -2,6 +2,7 @@
   "expo": {
     "name": "Sitewyre Portal",
     "slug": "sitewyre-portal",
+    "scheme": "sitewyre",
     "version": "0.1.0",
     "orientation": "portrait",
     "platforms": ["ios", "android"],

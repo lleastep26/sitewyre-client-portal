@@ -1,6 +1,6 @@
 # Automations toggles + Expo crew checklist/photos
 
-**Status:** Shipped (code) — apply `0006_client_automations.sql`
+**Status:** Shipped (code) — apply `0006_client_automations.sql` · Phase 4 wrap: [phase4-wrap.md](./phase4-wrap.md)
 
 ## What landed
 

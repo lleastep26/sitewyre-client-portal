@@ -1,6 +1,6 @@
 # Phase 4 — Expo mobile scaffold + ingest/RLS harden
 
-**Status:** Shipped (code) — apply RLS migration in Supabase
+**Status:** Product wrap complete — see [phase4-wrap.md](./phase4-wrap.md)
 
 ## What landed
 
@@ -10,15 +10,16 @@
 | **Crew RLS** | Migration `0005_crew_rls_tighten.sql` — crew writes jobs/appointments/inbox; quotes/invoices/settings-like tables owner/office only |
 | **Expo app** | `apps/mobile` — login + crew today against shared Supabase |
 | **Owner mobile** | Owner/office: Leads + Inbox (SMS reply) + Today; crew stays Today-only |
+| **Realtime** | Mobile Leads + Inbox subscribe to `postgres_changes` (migration `0008`) |
+| **Deep link auth** | Scheme `sitewyre://auth/callback` for magic links |
 
 ## Apply
 
-1. Supabase SQL: `supabase/migrations/0005_crew_rls_tighten.sql`
-2. Optional: set `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` on Vercel when site widgets are ready
-3. `cd apps/mobile && npm install && npx expo start`
+1. Supabase SQL: `0005_crew_rls_tighten.sql`, `0008_realtime_leads_messages.sql`
+2. Auth redirect: `sitewyre://auth/callback`
+3. Optional: Turnstile + VAPID on Vercel
+4. `cd apps/mobile && npm install && npx expo start`
 
-## Guardrails
+## Guardrails (post-MVP)
 
-- No store submission yet  
-- No Google / n8n cutover  
-- No Terminal tap-to-pay yet  
+- Store submission, Google / n8n cutover, Terminal tap-to-pay — see [phase4-wrap.md](./phase4-wrap.md)

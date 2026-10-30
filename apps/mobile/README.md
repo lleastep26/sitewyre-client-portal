@@ -1,12 +1,14 @@
 # Sitewyre Portal — native apps (Phase 4)
 
-Expo TypeScript scaffold sharing the Sitewyre Supabase project (same `memberships` / `jobs` / `leads` / `messages` as the web portal).
+Expo TypeScript app sharing the Sitewyre Supabase project.
 
-## Screens (MVP)
+**Phase 4 product MVP:** complete — see [docs/phase4-wrap.md](../../docs/phase4-wrap.md).
 
-- Login — magic link email or phone OTP (Supabase Auth)
-- **Owner / office** — tabs: Leads, Inbox (SMS reply via portal API), Today
-- **Crew** — Today only: checklist, camera photos, Start route / Complete, Maps
+## Screens
+
+- Login — magic link (`sitewyre://auth/callback`) or phone OTP
+- **Owner / office** — Leads (Call / Reply SMS + Realtime), Inbox (SMS reply + Realtime), Today
+- **Crew** — Today: checklist, photos, Start route / Complete, Maps
 
 ## Setup
 
@@ -17,19 +19,17 @@ npm install
 npx expo start
 ```
 
-Env:
-
 ```
 EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_APP_URL=https://sitewyre-client-portal.vercel.app
 ```
 
-Use the same Auth redirect / phone providers as the web portal. Add Supabase Auth redirect URLs for Expo (`exp://…`) as needed.
+Add Supabase Auth redirect URL: `sitewyre://auth/callback` (plus Expo Go URL if testing there).
 
-Inbox SMS uses `POST /api/inbox/send` with the Supabase access token (`Authorization: Bearer …`).
+Apply migration `0008_realtime_leads_messages.sql` for live Inbox/Leads updates.
 
-## Later
+## Post–Phase 4
 
 - Tap-to-pay (Stripe Terminal) after Connect
 - Store submission (P4-T5)

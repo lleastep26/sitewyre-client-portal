@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import * as Linking from "expo-linking";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { CrewTodayScreen } from "./src/screens/CrewTodayScreen";
 import { OwnerShell } from "./src/screens/OwnerShell";
@@ -15,13 +16,26 @@ import {
   loadMembership,
   type MembershipInfo,
 } from "./src/lib/membership";
-import { getSessionUserId, supabaseConfigured } from "./src/lib/supabase";
+import {
+  completeAuthFromUrl,
+  getSessionUserId,
+  supabase,
+  supabaseConfigured,
+} from "./src/lib/supabase";
 
 export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [booting, setBooting] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  async function establishSession(id: string) {
+    setUserId(id);
+    const mem = await loadMembership(id);
+    if (!mem) setError("No membership found for this account.");
+    else setError(null);
+    setMembership(mem);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -30,6 +44,19 @@ export default function App() {
         if (mounted) setBooting(false);
         return;
       }
+
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl?.includes("auth/callback") || initialUrl?.includes("access_token") || initialUrl?.includes("code=")) {
+        const result = await completeAuthFromUrl(initialUrl);
+        if (!mounted) return;
+        if (result.error) setError(result.error);
+        if (result.userId) {
+          await establishSession(result.userId);
+          setBooting(false);
+          return;
+        }
+      }
+
       const id = await getSessionUserId();
       if (!mounted) return;
       if (!id) {
@@ -38,25 +65,42 @@ export default function App() {
         setBooting(false);
         return;
       }
-      setUserId(id);
-      const mem = await loadMembership(id);
-      if (!mounted) return;
-      if (!mem) setError("No membership found for this account.");
-      setMembership(mem);
-      setBooting(false);
+      await establishSession(id);
+      if (mounted) setBooting(false);
     })();
+
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      void (async () => {
+        if (!url.includes("auth") && !url.includes("access_token") && !url.includes("code=")) {
+          return;
+        }
+        const result = await completeAuthFromUrl(url);
+        if (result.error) setError(result.error);
+        if (result.userId) await establishSession(result.userId);
+      })();
+    });
+
+    const authSub = supabase?.auth.onAuthStateChange((_event, session) => {
+      const id = session?.user?.id ?? null;
+      if (!id) {
+        setUserId(null);
+        setMembership(null);
+        return;
+      }
+      void establishSession(id);
+    });
+
     return () => {
       mounted = false;
+      sub.remove();
+      authSub?.data.subscription.unsubscribe();
     };
   }, []);
 
   async function handleSignedIn(id: string) {
     setBooting(true);
     setError(null);
-    setUserId(id);
-    const mem = await loadMembership(id);
-    if (!mem) setError("No membership found for this account.");
-    setMembership(mem);
+    await establishSession(id);
     setBooting(false);
   }
 

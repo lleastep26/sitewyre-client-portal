@@ -21,7 +21,15 @@ type Message = {
   contacts?: { name: string } | { name: string }[] | null;
 };
 
-export function OwnerInboxScreen({ clientId }: { clientId: string }) {
+export function OwnerInboxScreen({
+  clientId,
+  focusContactId,
+  onFocusConsumed,
+}: {
+  clientId: string;
+  focusContactId?: string | null;
+  onFocusConsumed?: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +43,7 @@ export function OwnerInboxScreen({ clientId }: { clientId: string }) {
     if (!supabase) return;
     setLoading(true);
     setError(null);
-    const { data, error: qErr } = await supabase
+    let query = supabase
       .from("messages")
       .select(
         "id, contact_id, channel, direction, body, created_at, contacts(name)",
@@ -43,14 +51,64 @@ export function OwnerInboxScreen({ clientId }: { clientId: string }) {
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(40);
+    if (focusContactId) {
+      query = query.eq("contact_id", focusContactId);
+    }
+    const { data, error: qErr } = await query;
     if (qErr) setError(qErr.message);
     else setMessages((data as unknown as Message[]) ?? []);
     setLoading(false);
-  }, [clientId]);
+  }, [clientId, focusContactId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+    const channel = client
+      .channel(`messages:${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `client_id=eq.${clientId}`,
+        },
+        () => {
+          void load();
+        },
+      )
+      .subscribe();
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [clientId, load]);
+
+  const openReplyForContact = useCallback(
+    async (contactId: string, nameHint?: string) => {
+      setReplyContactId(contactId);
+      setReplyName(nameHint ?? "Contact");
+      setDraft("");
+      setError(null);
+      if (!supabase) return;
+      const { data } = await supabase
+        .from("contacts")
+        .select("name, phones")
+        .eq("id", contactId)
+        .maybeSingle();
+      if (data?.name) setReplyName(String(data.name));
+      setReplyPhone(data?.phones?.[0] ? String(data.phones[0]) : null);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!focusContactId) return;
+    void openReplyForContact(focusContactId).then(() => onFocusConsumed?.());
+  }, [focusContactId, openReplyForContact, onFocusConsumed]);
 
   function contactName(item: Message) {
     return (
@@ -61,17 +119,7 @@ export function OwnerInboxScreen({ clientId }: { clientId: string }) {
   }
 
   async function openReply(item: Message) {
-    setReplyContactId(item.contact_id);
-    setReplyName(contactName(item));
-    setDraft("");
-    setError(null);
-    if (!supabase) return;
-    const { data } = await supabase
-      .from("contacts")
-      .select("phones")
-      .eq("id", item.contact_id)
-      .maybeSingle();
-    setReplyPhone(data?.phones?.[0] ? String(data.phones[0]) : null);
+    await openReplyForContact(item.contact_id, contactName(item));
   }
 
   async function sendReply() {
@@ -129,7 +177,10 @@ export function OwnerInboxScreen({ clientId }: { clientId: string }) {
               <Text style={styles.link}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={[styles.sendBtn, (!draft.trim() || sending) && styles.sendDisabled]}
+              style={[
+                styles.sendBtn,
+                (!draft.trim() || sending) && styles.sendDisabled,
+              ]}
               disabled={!draft.trim() || sending || !replyPhone}
               onPress={() => void sendReply()}
             >

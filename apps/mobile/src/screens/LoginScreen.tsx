@@ -33,7 +33,9 @@ export function LoginScreen({
     try {
       const { error } = await signInWithMagicLink(email.trim());
       if (error) throw error;
-      setMessage("Check your email for the magic link, then reopen the app.");
+      setMessage(
+        "Check your email for the magic link. Open it on this device to finish sign-in (sitewyre://auth/callback).",
+      );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
