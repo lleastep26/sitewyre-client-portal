@@ -173,6 +173,11 @@ export async function updateJobStatus(input: {
         { business_name: client.business_name ?? "us" },
       )} ${client.google_review_url ?? ""}`.trim();
       const sendAt = nextSendableAt(new Date(), timeZone);
+      // Don't log "sent" here: appointmentReminder (the Inngest function
+      // this event triggers) logs the real outcome itself once it actually
+      // runs — including an "opted_out" skip. Logging "sent" at dispatch
+      // time, before the opt-out check or the send has happened, produced a
+      // workflow_runs row that didn't reflect what actually occurred.
       await inngest
         .send({
           name: "portal/appointment.reminder",
@@ -188,12 +193,6 @@ export async function updateJobStatus(input: {
             : {}),
         })
         .catch(() => undefined);
-      await supabase.from("workflow_runs").insert({
-        client_id: client.id,
-        trigger: "review_request",
-        status: "sent",
-        log: { jobId: input.jobId, phone },
-      });
     } else if (!auto.enabled) {
       await supabase.from("workflow_runs").insert({
         client_id: client.id,
