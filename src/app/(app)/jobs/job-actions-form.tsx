@@ -23,11 +23,14 @@ export function JobStatusButtons({ jobId }: { jobId: string }) {
       <Button
         size="sm"
         disabled={pending}
-        onClick={() =>
+        onClick={() => {
+          if (!confirm("Mark this job complete? This starts the review request.")) {
+            return;
+          }
           start(() => {
             void updateJobStatus({ jobId, status: "complete" });
-          })
-        }
+          });
+        }}
       >
         Complete
       </Button>

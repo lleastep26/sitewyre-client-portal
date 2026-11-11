@@ -1,3 +1,5 @@
+import { applyTemplate } from "@/lib/automations";
+
 /**
  * Prefer the owner's manually-entered google_review_url; fall back to
  * Google's well-known direct-review-link format derived from
@@ -13,4 +15,22 @@ export function resolveGoogleReviewUrl(client: {
     return `https://search.google.com/local/writereview?placeid=${encodeURIComponent(client.google_place_id)}`;
   }
   return null;
+}
+
+/**
+ * Applies the template, then guarantees the tracked link is present even
+ * if the template (an owner's old customization, or any future default)
+ * doesn't have a {{review_link}} placeholder — the link must never be
+ * silently dropped from a review-request message.
+ */
+export function buildReviewMessage(
+  template: string,
+  vars: Record<string, string>,
+  reviewLink: string,
+): string {
+  const body = applyTemplate(template, { ...vars, review_link: reviewLink });
+  if (!template.includes("{{review_link}}")) {
+    return `${body} ${reviewLink}`.trim();
+  }
+  return body;
 }

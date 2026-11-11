@@ -35,7 +35,7 @@ export const AUTOMATION_DEFS = [
     key: "review_request",
     label: "6. Review request on complete",
     defaultTemplate:
-      "Thanks for choosing {{business_name}}! Mind leaving a quick review?",
+      "Thanks for choosing {{business_name}}! Mind leaving a quick review? {{review_link}}",
   },
   {
     key: "invoice_reminder",

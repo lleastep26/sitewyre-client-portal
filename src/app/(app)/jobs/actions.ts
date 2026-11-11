@@ -18,7 +18,6 @@ import {
 import { normalizePhone } from "@/lib/utils";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
-import { getAppUrl } from "@/lib/supabase/env";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -123,6 +122,16 @@ export async function updateJobStatus(input: {
     .eq("client_id", client.id);
   if (error) return { error: error.message };
 
+  // Lets reviewRequestDrip's cancelOn cancel a running drip when a job is
+  // changed away from "complete" (its `if` filters out the "changed TO
+  // complete" case that starts the drip in the first place).
+  await inngest
+    .send({
+      name: "portal/job.status_changed",
+      data: { jobId: input.jobId, status: input.status },
+    })
+    .catch(() => undefined);
+
   const resolvedContact = await contactForJob(supabase, input.jobId, client.id);
   const phone =
     (input.contactPhone ? normalizePhone(input.contactPhone) : null) ||
@@ -181,60 +190,76 @@ export async function updateJobStatus(input: {
   if (input.status === "complete") {
     const auto = await getAutomationState(supabase, client.id, "review_request");
     const reviewDestination = resolveGoogleReviewUrl(client);
-    if (auto.enabled && phone && client.twilio_phone_number && reviewDestination) {
-      const { data: reviewLink } = await supabase
-        .from("review_links")
-        .insert({ client_id: client.id, contact_id: contactId })
-        .select("token")
-        .single();
-      const reviewUrl = reviewLink ? `${getAppUrl()}/r/${reviewLink.token}` : "";
-      const reviewBody = `${applyTemplate(
-        auto.templateBody ??
-          "Thanks for choosing {{business_name}}! Mind leaving a quick review?",
-        { business_name: client.business_name ?? "us" },
-      )} ${reviewUrl}`.trim();
-      const sendAt = nextSendableAt(new Date(), timeZone);
-      // "since" marks when this funnel started: appointmentReminder skips
-      // if the contact has replied at all after this point, since a human
-      // has taken over.
-      const since = new Date().toISOString();
-      // Don't log "sent" here: appointmentReminder (the Inngest function
-      // this event triggers) logs the real outcome itself once it actually
-      // runs — including an "opted_out" skip. Logging "sent" at dispatch
-      // time, before the opt-out check or the send has happened, produced a
-      // workflow_runs row that didn't reflect what actually occurred.
-      await inngest
-        .send({
-          name: "portal/appointment.reminder",
-          data: {
-            to: phone,
-            from: client.twilio_phone_number,
-            body: reviewBody,
-            clientId: client.id,
-            trigger: "review_request",
-            contactId: contactId ?? undefined,
-            since,
-            reviewToken: reviewLink?.token,
-          },
-          ...(sendAt.getTime() > Date.now() + 5_000
-            ? { ts: sendAt.getTime() }
-            : {}),
-        })
-        .catch(() => undefined);
-    } else if (!auto.enabled) {
+
+    if (!auto.enabled) {
       await supabase.from("workflow_runs").insert({
         client_id: client.id,
         trigger: "review_request",
         status: "skipped",
         log: { jobId: input.jobId, reason: "disabled" },
       });
-    } else if (auto.enabled && !reviewDestination) {
+    } else if (!phone || !client.twilio_phone_number || !reviewDestination) {
       await supabase.from("workflow_runs").insert({
         client_id: client.id,
         trigger: "review_request",
         status: "skipped",
         log: { jobId: input.jobId, reason: "no_review_destination" },
       });
+    } else {
+      // Check the 90-day guard BEFORE creating a review_links row, so a
+      // blocked attempt never itself counts toward the 90 days.
+      let recentlyRequested = false;
+      if (contactId) {
+        const ninetyDaysAgo = new Date(
+          Date.now() - 90 * 24 * 60 * 60 * 1000,
+        ).toISOString();
+        const { data: recent } = await supabase
+          .from("review_links")
+          .select("created_at")
+          .eq("contact_id", contactId)
+          .gte("created_at", ninetyDaysAgo)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        recentlyRequested = Boolean(recent);
+      }
+
+      if (recentlyRequested) {
+        await supabase.from("workflow_runs").insert({
+          client_id: client.id,
+          trigger: "review_request",
+          status: "skipped",
+          log: { jobId: input.jobId, reason: "recent_review_request" },
+        });
+      } else {
+        const { data: reviewLink } = await supabase
+          .from("review_links")
+          .insert({ client_id: client.id, contact_id: contactId })
+          .select("token")
+          .single();
+
+        if (reviewLink) {
+          // completedAt anchors every step's sleepUntil target and the
+          // "has the contact replied since" check in reviewRequestDrip —
+          // a quiet-hours delay on one step must never push later steps
+          // back, so this is fixed at dispatch time, not re-derived later.
+          const completedAt = new Date().toISOString();
+          await inngest
+            .send({
+              name: "portal/review_request.started",
+              data: {
+                jobId: input.jobId,
+                clientId: client.id,
+                contactId: contactId ?? undefined,
+                phone,
+                from: client.twilio_phone_number,
+                reviewToken: reviewLink.token,
+                completedAt,
+              },
+            })
+            .catch(() => undefined);
+        }
+      }
     }
 
     await inngest

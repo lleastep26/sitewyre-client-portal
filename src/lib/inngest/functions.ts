@@ -15,8 +15,10 @@ import {
   shouldNudgeOwnerForSla,
 } from "@/lib/leads/speed-to-lead";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
-import { hasRepliedSince } from "@/lib/funnels/human-reply";
 import { hasRecentSend } from "@/lib/funnels/dedupe";
+import { buildReviewMessage } from "@/lib/funnels/review-link";
+import { nextFunnelSendableAt } from "@/lib/funnels/quiet-hours";
+import { shouldStopReviewDrip } from "@/lib/funnels/review-request-gate";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -376,24 +378,27 @@ export const appointmentReminder = inngest.createFunction(
         from?: string;
         clientId?: string;
         trigger?: string;
-        contactId?: string;
-        since?: string;
-        reviewToken?: string;
       };
     };
     step: Step;
   }) => {
-    const { to, body, from, clientId, trigger, contactId, since, reviewToken } =
-      event.data;
+    const { to, body, from, clientId, trigger } = event.data;
     if (!to) return { skipped: true };
+
+    // review_request moved to the dedicated reviewRequestDrip function
+    // (portal/review_request.started). Any review_request event still
+    // queued here from before that move is stale: no-op it rather than
+    // let it fall through to the generic appointment_reminder gate below,
+    // which would check the wrong automation toggle and skip the
+    // opted-out/replied/clicked checks that trigger used to have.
+    if (trigger === "review_request") {
+      return { skipped: true, reason: "migrated_to_review_request_drip" };
+    }
 
     let timeZone = "America/Chicago";
     if (clientId) {
       const supabase = createAdminClient();
-      const gateKey =
-        trigger === "on_my_way" || trigger === "review_request"
-          ? trigger
-          : "appointment_reminder";
+      const gateKey = trigger === "on_my_way" ? trigger : "appointment_reminder";
       const auto = await getAutomationState(supabase, clientId, gateKey);
       if (!auto.enabled) return { skipped: true, reason: "disabled" };
 
@@ -404,43 +409,6 @@ export const appointmentReminder = inngest.createFunction(
           log: { to },
         });
         return { skipped: true, reason: "opted_out" };
-      }
-
-      // Review funnels only — a human has taken over once the contact
-      // replies, so the remaining review-request reminders stop. This
-      // never applies to appointment_reminder/on_my_way.
-      if (
-        trigger === "review_request" &&
-        contactId &&
-        since &&
-        (await hasRepliedSince(supabase, contactId, since))
-      ) {
-        await supabase.from("workflow_runs").insert({
-          client_id: clientId,
-          trigger,
-          status: "skipped",
-          log: { to, contactId, reason: "replied" },
-        });
-        return { skipped: true, reason: "replied" };
-      }
-
-      // Review funnels only — stop remaining reminders once the tracked
-      // link has been clicked.
-      if (trigger === "review_request" && reviewToken) {
-        const { data: link } = await supabase
-          .from("review_links")
-          .select("clicked_at")
-          .eq("token", reviewToken)
-          .maybeSingle();
-        if (link?.clicked_at) {
-          await supabase.from("workflow_runs").insert({
-            client_id: clientId,
-            trigger,
-            status: "skipped",
-            log: { to, reviewToken, reason: "clicked" },
-          });
-          return { skipped: true, reason: "clicked" };
-        }
       }
 
       const { data: client } = await supabase
@@ -466,6 +434,165 @@ export const appointmentReminder = inngest.createFunction(
           log: { to },
         });
       });
+    }
+
+    return { ok: true };
+  },
+);
+
+const REVIEW_REQUEST_STEP2_TEMPLATE =
+  "Hi {{first_name}}, just a friendly reminder — your review means a lot to our small business: {{review_link}}";
+const REVIEW_REQUEST_STEP3_TEMPLATE =
+  "Hi {{first_name}}, one last ask — a quick review would really help {{business_name}}: {{review_link}}";
+const REVIEW_REQUEST_FALLBACK_TEMPLATE =
+  "Thanks for choosing {{business_name}}! Mind leaving a quick review? {{review_link}}";
+
+// This function requires step.sleepUntil (not the step.sleep fallback
+// respectQuietHours uses elsewhere) — the Inngest runtime always provides
+// it; this narrows the shared optional-sleepUntil Step type for this
+// function only.
+type StepWithSleepUntil = Step & { sleepUntil: NonNullable<Step["sleepUntil"]> };
+
+type ReviewRequestStartedEvent = {
+  name: "portal/review_request.started";
+  data: {
+    jobId: string;
+    clientId: string;
+    contactId?: string;
+    phone: string;
+    from: string;
+    reviewToken: string;
+    /** When the job was marked complete — every step's send time and the
+     * "has the contact replied since" check are anchored to this, not to
+     * whenever this function happens to run. */
+    completedAt: string;
+  };
+};
+
+export const reviewRequestDrip = inngest.createFunction(
+  {
+    id: "review-request-drip",
+    triggers: [{ event: "portal/review_request.started" }],
+    // If the job's status changes away from "complete" (e.g. completed by
+    // mistake and reverted), cancel this run — portal/job.status_changed
+    // is sent on every status change, with the `if` filtering out the
+    // "changed TO complete" case that started this run in the first place.
+    cancelOn: [
+      {
+        event: "portal/job.status_changed",
+        match: "data.jobId",
+        if: "async.data.status != 'complete'",
+      },
+    ],
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: ReviewRequestStartedEvent;
+    step: StepWithSleepUntil;
+  }) => {
+    const { jobId, clientId, contactId, phone, from, reviewToken, completedAt } =
+      event.data;
+    const supabase = createAdminClient();
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("business_name, timezone")
+      .eq("id", clientId)
+      .maybeSingle();
+    const businessName = client?.business_name ?? "us";
+    const timeZone = client?.timezone ?? "America/Chicago";
+
+    let firstName = "there";
+    if (contactId) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("name")
+        .eq("id", contactId)
+        .maybeSingle();
+      firstName = contact?.name?.split(" ")[0] || firstName;
+    }
+
+    const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/r/${reviewToken}`;
+
+    async function logSkip(stepNum: number, reason: string) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "review_request",
+        status: "skipped",
+        log: { jobId, step: stepNum, reason },
+      });
+    }
+
+    // Returns false (and logs why) if this step must not send — re-checked
+    // fresh every time, never cached from an earlier step, since each of
+    // these can change while this function is asleep.
+    async function runStep(stepNum: 1 | 2 | 3, fallbackTemplate: string) {
+      const gate = await shouldStopReviewDrip(supabase, {
+        clientId,
+        phone,
+        contactId,
+        completedAt,
+        reviewToken,
+      });
+      if (gate.stop) {
+        await logSkip(stepNum, gate.reason);
+        return false;
+      }
+
+      const sendAt = nextFunnelSendableAt(new Date(), timeZone);
+      if (sendAt.getTime() > Date.now() + 5_000) {
+        await step.sleepUntil(`funnel-quiet-${stepNum}`, sendAt);
+      }
+
+      const template =
+        stepNum === 1
+          ? gate.templateBody ??
+            getDefaultTemplate("review_request") ??
+            REVIEW_REQUEST_FALLBACK_TEMPLATE
+          : fallbackTemplate;
+      const body = buildReviewMessage(
+        template,
+        { business_name: businessName, first_name: firstName },
+        reviewUrl,
+      );
+
+      await step.run(`send-${stepNum}`, () =>
+        getSmsProvider().send({ to: phone, from, body }),
+      );
+      await step.run(`log-sent-${stepNum}`, async () => {
+        await supabase.from("workflow_runs").insert({
+          client_id: clientId,
+          trigger: "review_request",
+          status: "sent",
+          log: { jobId, step: stepNum, to: phone },
+        });
+      });
+      return true;
+    }
+
+    const completedAtMs = new Date(completedAt).getTime();
+
+    await step.sleepUntil("wait-step-1", new Date(completedAtMs + 2 * 60 * 60 * 1000));
+    if (!(await runStep(1, REVIEW_REQUEST_FALLBACK_TEMPLATE))) {
+      return { stopped: true, at: 1 };
+    }
+
+    await step.sleepUntil(
+      "wait-step-2",
+      new Date(completedAtMs + 2 * 24 * 60 * 60 * 1000),
+    );
+    if (!(await runStep(2, REVIEW_REQUEST_STEP2_TEMPLATE))) {
+      return { stopped: true, at: 2 };
+    }
+
+    await step.sleepUntil(
+      "wait-step-3",
+      new Date(completedAtMs + 5 * 24 * 60 * 60 * 1000),
+    );
+    if (!(await runStep(3, REVIEW_REQUEST_STEP3_TEMPLATE))) {
+      return { stopped: true, at: 3 };
     }
 
     return { ok: true };
@@ -909,6 +1036,7 @@ export const functions = [
   leadSlaNudge,
   missedCallTextBack,
   appointmentReminder,
+  reviewRequestDrip,
   invoiceReminder,
   invoiceFollowUp,
   quoteFollowUp,

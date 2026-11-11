@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
+import { buildReviewMessage, resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
 import { isLikelyLinkPreviewBot } from "@/lib/funnels/link-preview-bots";
+
+describe("buildReviewMessage", () => {
+  it("substitutes {{review_link}} when the template has the placeholder", () => {
+    const body = buildReviewMessage(
+      "Hi {{first_name}}: {{review_link}}",
+      { first_name: "Sam" },
+      "https://example.com/r/tok",
+    );
+    expect(body).toBe("Hi Sam: https://example.com/r/tok");
+  });
+
+  it("appends the link when the template has no placeholder, so it is never dropped", () => {
+    const body = buildReviewMessage(
+      "Thanks, {{first_name}}!",
+      { first_name: "Sam" },
+      "https://example.com/r/tok",
+    );
+    expect(body).toBe("Thanks, Sam! https://example.com/r/tok");
+  });
+});
 
 describe("resolveGoogleReviewUrl", () => {
   it("prefers the owner's google_review_url when set", () => {

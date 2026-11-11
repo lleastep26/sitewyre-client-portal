@@ -82,7 +82,14 @@ describe("updateJobStatus — on_my_way opt-out gate", () => {
     });
 
     expect(sendSpy).not.toHaveBeenCalled();
-    expect(inngestSendSpy).not.toHaveBeenCalled();
+    // portal/job.status_changed is sent unconditionally on every status
+    // update (for reviewRequestDrip's cancelOn) — only the on_my_way
+    // reminder dispatch itself must not happen.
+    expect(
+      inngestSendSpy.mock.calls.every(
+        ([arg]) => (arg as { name: string }).name === "portal/job.status_changed",
+      ),
+    ).toBe(true);
     expect(workflowRuns).toHaveLength(1);
     expect(workflowRuns[0]).toMatchObject({
       trigger: "on_my_way",
