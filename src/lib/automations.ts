@@ -61,6 +61,12 @@ export const AUTOMATION_DEFS = [
     defaultTemplate:
       "SLA: {{first_name}} still needs a reply ({{business_name}}). {{phone}}",
   },
+  {
+    key: "review_blast",
+    label: "11. Past-customer review blast (onboarding import)",
+    defaultTemplate:
+      "Hi {{first_name}}, it's {{owner_name}} from {{business_name}}. We did your {{job_type}} a while back and would really appreciate a quick Google review: {{review_link}}. Reply STOP to opt out.",
+  },
 ] as const;
 
 export type AutomationKey = (typeof AUTOMATION_DEFS)[number]["key"];
