@@ -46,12 +46,24 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    const redirectUrl = request.nextUrl.clone();
-    const next = request.nextUrl.searchParams.get("next");
-    redirectUrl.pathname =
-      next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    // Only steer AWAY users who actually have access — a logged-in user
+    // with no membership and no owned client must be able to stay on
+    // /login?error=no_membership, or this redirects them to "/", which
+    // (app)/layout redirects right back to /login: an infinite loop.
+    const [{ data: memberships }, { data: ownedClient }] = await Promise.all([
+      supabase.from("memberships").select("id").eq("user_id", user.id).limit(1),
+      supabase.from("clients").select("id").eq("user_id", user.id).maybeSingle(),
+    ]);
+    const hasAccess = Boolean(memberships?.length) || Boolean(ownedClient);
+
+    if (hasAccess) {
+      const redirectUrl = request.nextUrl.clone();
+      const next = request.nextUrl.searchParams.get("next");
+      redirectUrl.pathname =
+        next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      redirectUrl.search = "";
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
   return supabaseResponse;
