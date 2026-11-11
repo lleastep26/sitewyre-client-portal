@@ -7,6 +7,7 @@ const links = [
   { href: "/reports", label: "Reports" },
   { href: "/automations", label: "Automations" },
   { href: "/review-blast", label: "Review blast" },
+  { href: "/results", label: "Results" },
   { href: "/settings", label: "Settings" },
   { href: "/help", label: "Help" },
   { href: "/crew", label: "Crew mode" },

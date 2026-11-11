@@ -114,6 +114,7 @@ describe("updateJobStatus — review-request dispatch", () => {
     expect(insertSpy).toHaveBeenCalledWith({
       client_id: "client1",
       contact_id: "contact1",
+      source: "review_request",
     });
 
     const event = findSentEvent("portal/review_request.started");

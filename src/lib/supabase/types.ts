@@ -313,6 +313,7 @@ export type Database = {
         client_id: string;
         contact_id: string | null;
         funnel_run_id: string | null;
+        source: string | null;
         created_at: string;
         clicked_at: string | null;
       }>;

@@ -4,9 +4,12 @@ import {
   AUTOMATION_DEFS,
   ensureClientAutomations,
 } from "@/lib/automations";
+import {
+  buildSampleTemplateValues,
+  extractTemplateVariables,
+} from "@/lib/funnels/template-preview";
 import { AutomationToggle } from "./toggle";
-import { setAutomationTemplate } from "./actions";
-import { Button } from "@/components/ui/button";
+import { TemplateEditor } from "./template-editor";
 
 export default async function AutomationsPage() {
   const { supabase, client } = await requireMembership();
@@ -30,6 +33,7 @@ export default async function AutomationsPage() {
   const byKey = new Map(
     (settings ?? []).map((s) => [s.trigger, s] as const),
   );
+  const sampleValues = buildSampleTemplateValues(client);
 
   return (
     <div className="space-y-4 px-4 pb-8">
@@ -63,24 +67,13 @@ export default async function AutomationsPage() {
                 <AutomationToggle trigger={item.key} enabled={enabled} />
               </div>
               {item.defaultTemplate != null ? (
-                <form
-                  action={async (fd) => {
-                    await setAutomationTemplate(fd);
-                  }}
-                  className="mt-3 space-y-2"
-                >
-                  <input type="hidden" name="trigger" value={item.key} />
-                  <textarea
-                    name="template_body"
-                    defaultValue={template}
-                    rows={2}
-                    className="w-full rounded-md border border-charcoal/15 px-3 py-2 text-xs"
-                    placeholder="Template vars: {{first_name}}, {{business_name}}, {{when}}, {{quote_number}}, {{invoice_number}}, {{amount}}, {{link}}, {{phone}}"
-                  />
-                  <Button type="submit" size="sm" variant="secondary">
-                    Save template
-                  </Button>
-                </form>
+                <TemplateEditor
+                  trigger={item.key}
+                  defaultValue={template}
+                  fallbackTemplate={item.defaultTemplate}
+                  variables={extractTemplateVariables(item.defaultTemplate)}
+                  sampleValues={sampleValues}
+                />
               ) : null}
             </li>
           );

@@ -109,7 +109,11 @@ export async function confirmReviewBlast(formData: FormData) {
 
     const { data: reviewLink } = await supabase
       .from("review_links")
-      .insert({ client_id: client.id, contact_id: contact.id })
+      .insert({
+        client_id: client.id,
+        contact_id: contact.id,
+        source: "review_blast",
+      })
       .select("token")
       .single();
     if (!reviewLink) continue;

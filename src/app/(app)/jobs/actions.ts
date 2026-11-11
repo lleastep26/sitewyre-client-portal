@@ -223,7 +223,11 @@ export async function updateJobStatus(input: {
       } else {
         const { data: reviewLink } = await supabase
           .from("review_links")
-          .insert({ client_id: client.id, contact_id: contactId })
+          .insert({
+            client_id: client.id,
+            contact_id: contactId,
+            source: "review_request",
+          })
           .select("token")
           .single();
 
