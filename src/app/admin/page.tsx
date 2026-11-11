@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { ADMIN_VIEW_COOKIE, requireAdmin } from "@/lib/auth/session";
 import { switchAdminViewClient } from "./actions";
+import { CallRoutingForm } from "./call-routing-form";
+import { A2pStatusSelect } from "./a2p-status-select";
+import { NumberPurchase } from "./number-purchase";
 
 export default async function AdminPage() {
   const { supabase } = await requireAdmin();
@@ -10,7 +13,9 @@ export default async function AdminPage() {
 
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, business_name, twilio_phone_number, a2p_status, plan, status")
+    .select(
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds",
+    )
     .order("business_name", { ascending: true });
 
   return (
@@ -55,6 +60,16 @@ export default async function AdminPage() {
                   </button>
                 </form>
               </div>
+
+              <div className="mt-2">
+                <A2pStatusSelect clientId={c.id} status={c.a2p_status} />
+              </div>
+              <CallRoutingForm
+                clientId={c.id}
+                forwardPhone={c.forward_to_phone}
+                dialTimeoutSeconds={c.dial_timeout_seconds}
+              />
+              {!c.twilio_phone_number ? <NumberPurchase clientId={c.id} /> : null}
             </li>
           );
         })}

@@ -4,8 +4,7 @@ import { inngest } from "@/lib/inngest/client";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { normalizePhone } from "@/lib/utils";
 import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
-import { isLocalDevBypassAllowed } from "@/lib/twilio/validate";
-import twilio from "twilio";
+import { validateTwilioSignature } from "@/lib/twilio/validate";
 
 // Exact whole-message match only, trimmed + case-insensitive — "Stop by
 // Thursday" must never match. START/UNSTOP are the opt-back-in keywords;
@@ -15,17 +14,7 @@ const STOP_KEYWORDS = ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"
 const START_KEYWORDS = ["START", "UNSTOP"];
 
 function validateTwilio(request: Request, params: URLSearchParams) {
-  const signature = request.headers.get("x-twilio-signature");
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const url = process.env.NEXT_PUBLIC_APP_URL
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/webhook`
-    : request.url;
-  if (!authToken || !signature) return isLocalDevBypassAllowed();
-  const data: Record<string, string> = {};
-  params.forEach((v, k) => {
-    data[k] = v;
-  });
-  return twilio.validateRequest(authToken, signature, url, data);
+  return validateTwilioSignature(request, params, "/api/twilio/webhook");
 }
 
 export async function POST(request: Request) {

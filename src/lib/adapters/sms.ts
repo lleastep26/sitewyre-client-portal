@@ -48,6 +48,45 @@ export class TwilioSmsProvider implements SmsProvider {
     });
     return { phoneNumber: purchased.phoneNumber, sid: purchased.sid };
   }
+
+  async assignNumberWebhooks(
+    sid: string,
+    urls: { smsUrl: string; voiceUrl: string },
+  ) {
+    const client = this.getClient();
+    await client.incomingPhoneNumbers(sid).update({
+      smsUrl: urls.smsUrl,
+      voiceUrl: urls.voiceUrl,
+    });
+  }
+
+  /** Search only — never purchases. Used for the admin "preview before you
+   * buy" step, so the confirm dialog can show the exact number. */
+  async searchLocalNumber(areaCode: string): Promise<string | null> {
+    const client = this.getClient();
+    const numbers = await client.availablePhoneNumbers("US").local.list({
+      areaCode: Number(areaCode),
+      smsEnabled: true,
+      voiceEnabled: true,
+      limit: 1,
+    });
+    return numbers[0]?.phoneNumber ?? null;
+  }
+
+  async getLocalNumberMonthlyPrice(): Promise<string> {
+    const client = this.getClient();
+    const country = await client.pricing.v1.phoneNumbers.countries("US").fetch();
+    const local = country.phoneNumberPrices.find((p) => p.numberType === "local");
+    return local?.currentPrice != null ? String(local.currentPrice) : "1.15";
+  }
+
+  /** Buys a specific, already-searched number — never an area code — so the
+   * number actually purchased always matches what the confirm dialog showed. */
+  async buyNumber(phoneNumber: string): Promise<{ phoneNumber: string; sid: string }> {
+    const client = this.getClient();
+    const purchased = await client.incomingPhoneNumbers.create({ phoneNumber });
+    return { phoneNumber: purchased.phoneNumber, sid: purchased.sid };
+  }
 }
 
 export class FakeSmsProvider implements SmsProvider {
@@ -60,6 +99,22 @@ export class FakeSmsProvider implements SmsProvider {
 
   async buyLocalNumber(areaCode: string) {
     return { phoneNumber: `+1${areaCode}5550100`, sid: "PNfake" };
+  }
+
+  async assignNumberWebhooks() {
+    // no-op in dev/test — nothing to configure
+  }
+
+  async searchLocalNumber(areaCode: string) {
+    return `+1${areaCode}5550100`;
+  }
+
+  async getLocalNumberMonthlyPrice() {
+    return "1.15";
+  }
+
+  async buyNumber(phoneNumber: string) {
+    return { phoneNumber, sid: "PNfake" };
   }
 }
 

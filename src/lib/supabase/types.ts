@@ -22,6 +22,8 @@ export type ClientRow = {
   twilio_phone_number: string | null;
   twilio_phone_sid: string | null;
   a2p_status: string | null;
+  forward_to_phone: string | null;
+  dial_timeout_seconds: number;
   stripe_connect_account_id: string | null;
   setup_checklist: Record<string, boolean> | null;
   created_at: string;

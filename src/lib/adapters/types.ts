@@ -10,6 +10,13 @@ export type SendSmsResult = { id: string; status: string };
 export interface SmsProvider {
   send(input: SendSmsInput): Promise<SendSmsResult>;
   buyLocalNumber(areaCode: string): Promise<{ phoneNumber: string; sid: string }>;
+  assignNumberWebhooks(
+    sid: string,
+    urls: { smsUrl: string; voiceUrl: string },
+  ): Promise<void>;
+  searchLocalNumber(areaCode: string): Promise<string | null>;
+  getLocalNumberMonthlyPrice(): Promise<string>;
+  buyNumber(phoneNumber: string): Promise<{ phoneNumber: string; sid: string }>;
 }
 
 export type SendEmailInput = {
