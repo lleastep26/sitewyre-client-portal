@@ -12,6 +12,7 @@ export type ClientRow = {
   stripe_subscription_id: string | null;
   google_review_url: string | null;
   google_place_id: string | null;
+  owner_name: string | null;
   site_key: string | null;
   timezone: string | null;
   brand_colors: Record<string, string> | null;

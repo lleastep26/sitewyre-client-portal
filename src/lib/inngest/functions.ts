@@ -19,6 +19,8 @@ import { hasRecentSend } from "@/lib/funnels/dedupe";
 import { buildReviewMessage } from "@/lib/funnels/review-link";
 import { nextFunnelSendableAt } from "@/lib/funnels/quiet-hours";
 import { shouldStopReviewDrip } from "@/lib/funnels/review-request-gate";
+import { shouldStopReviewBlast } from "@/lib/funnels/review-blast-gate";
+import { buildReviewBlastReminderMessage } from "@/lib/funnels/review-blast-message";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -1030,6 +1032,131 @@ export const healthMonitor = inngest.createFunction(
   },
 );
 
+type ReviewBlastContactEvent = {
+  name: "portal/review_blast.contact_started";
+  data: {
+    clientId: string;
+    contactId: string;
+    phone: string;
+    from: string;
+    reviewToken: string;
+    firstName: string;
+    firstMessageBody: string;
+    firstSendAt: string;
+    reminderSendAt: string;
+    /** When this import batch was confirmed — the "has this contact
+     * replied since" check anchors here, same role as review_request's
+     * completedAt. */
+    since: string;
+  };
+};
+
+export const reviewBlastContact = inngest.createFunction(
+  {
+    id: "review-blast-contact",
+    triggers: [{ event: "portal/review_blast.contact_started" }],
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: ReviewBlastContactEvent;
+    step: StepWithSleepUntil;
+  }) => {
+    const {
+      clientId,
+      contactId,
+      phone,
+      from,
+      reviewToken,
+      firstName,
+      firstMessageBody,
+      firstSendAt,
+      reminderSendAt,
+      since,
+    } = event.data;
+    const supabase = createAdminClient();
+
+    await step.sleepUntil("wait-first-send", new Date(firstSendAt));
+
+    const gate1 = await shouldStopReviewBlast(supabase, {
+      clientId,
+      phone,
+      contactId,
+      since,
+      reviewToken,
+      checkClicked: false,
+    });
+    if (gate1.stop) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "review_blast",
+        status: "skipped",
+        log: { contactId, step: 1, reason: gate1.reason },
+      });
+      return { stopped: true, at: 1, reason: gate1.reason };
+    }
+
+    await step.run("send-1", () =>
+      getSmsProvider().send({ to: phone, from, body: firstMessageBody }),
+    );
+    await step.run("log-sent-1", async () => {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "review_blast",
+        status: "sent",
+        log: { contactId, step: 1, to: phone },
+      });
+    });
+
+    await step.sleepUntil("wait-reminder", new Date(reminderSendAt));
+
+    const gate2 = await shouldStopReviewBlast(supabase, {
+      clientId,
+      phone,
+      contactId,
+      since,
+      reviewToken,
+      checkClicked: true,
+    });
+    if (gate2.stop) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "review_blast",
+        status: "skipped",
+        log: { contactId, step: 2, reason: gate2.reason },
+      });
+      return { stopped: true, at: 2, reason: gate2.reason };
+    }
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("business_name")
+      .eq("id", clientId)
+      .maybeSingle();
+    const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/r/${reviewToken}`;
+    const reminderBody = buildReviewBlastReminderMessage({
+      firstName,
+      businessName: client?.business_name ?? "us",
+      reviewLink: reviewUrl,
+    });
+
+    await step.run("send-2", () =>
+      getSmsProvider().send({ to: phone, from, body: reminderBody }),
+    );
+    await step.run("log-sent-2", async () => {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "review_blast",
+        status: "sent",
+        log: { contactId, step: 2, to: phone },
+      });
+    });
+
+    return { ok: true };
+  },
+);
+
 export const functions = [
   leadAutoReply,
   leadUnansweredFollowUp,
@@ -1037,6 +1164,7 @@ export const functions = [
   missedCallTextBack,
   appointmentReminder,
   reviewRequestDrip,
+  reviewBlastContact,
   invoiceReminder,
   invoiceFollowUp,
   quoteFollowUp,

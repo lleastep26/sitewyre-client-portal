@@ -175,6 +175,15 @@ export default async function SettingsPage({
         </CardDescription>
         <form action={updateSettings} className="mt-3 space-y-3">
           <div>
+            <Label htmlFor="owner_name">Owner name</Label>
+            <Input
+              id="owner_name"
+              name="owner_name"
+              defaultValue={client.owner_name ?? ""}
+              placeholder="Used in review-blast texts (e.g. it's Sam from Acme Cleaning)"
+            />
+          </div>
+          <div>
             <Label htmlFor="phone">Business phone</Label>
             <Input id="phone" name="phone" defaultValue={client.phone ?? ""} />
           </div>

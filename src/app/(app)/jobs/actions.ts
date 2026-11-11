@@ -18,6 +18,7 @@ import {
 import { normalizePhone } from "@/lib/utils";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
+import { hasRecentReviewRequest } from "@/lib/funnels/recent-review-request";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -208,21 +209,9 @@ export async function updateJobStatus(input: {
     } else {
       // Check the 90-day guard BEFORE creating a review_links row, so a
       // blocked attempt never itself counts toward the 90 days.
-      let recentlyRequested = false;
-      if (contactId) {
-        const ninetyDaysAgo = new Date(
-          Date.now() - 90 * 24 * 60 * 60 * 1000,
-        ).toISOString();
-        const { data: recent } = await supabase
-          .from("review_links")
-          .select("created_at")
-          .eq("contact_id", contactId)
-          .gte("created_at", ninetyDaysAgo)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        recentlyRequested = Boolean(recent);
-      }
+      const recentlyRequested = contactId
+        ? await hasRecentReviewRequest(supabase, contactId)
+        : false;
 
       if (recentlyRequested) {
         await supabase.from("workflow_runs").insert({

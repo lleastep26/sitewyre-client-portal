@@ -56,3 +56,22 @@ export async function findOrCreateContact(
   if (error) throw error;
   return data;
 }
+
+/** Read-only phone lookup — used by the review-blast preview to check
+ * "would this row match an existing contact" without creating anything. */
+export async function findContactByPhone(
+  supabase: Admin,
+  clientId: string,
+  phone: string,
+): Promise<{ id: string } | null> {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+  const { data } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("client_id", clientId)
+    .contains("phones", [normalized])
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
