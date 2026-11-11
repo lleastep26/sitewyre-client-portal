@@ -3,7 +3,15 @@ import { findOrCreateContact } from "@/lib/crm/contacts";
 import { inngest } from "@/lib/inngest/client";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { normalizePhone } from "@/lib/utils";
+import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
 import twilio from "twilio";
+
+// Exact whole-message match only, trimmed + case-insensitive — "Stop by
+// Thursday" must never match. START/UNSTOP are the opt-back-in keywords;
+// YES is deliberately excluded since it's already used below to confirm an
+// appointment, and treating it as opt-back-in too would conflict with that.
+const STOP_KEYWORDS = ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"];
+const START_KEYWORDS = ["START", "UNSTOP"];
 
 function validateTwilio(request: Request, params: URLSearchParams) {
   const signature = request.headers.get("x-twilio-signature");
@@ -73,11 +81,19 @@ export async function POST(request: Request) {
     });
 
     const upper = body.trim().toUpperCase();
-    if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(upper)) {
+    if (STOP_KEYWORDS.includes(upper)) {
       await supabase
         .from("contacts")
         .update({ sms_opt_in: false })
         .eq("id", contact.id);
+      await addOptOut(supabase, client.id, from);
+    }
+    if (START_KEYWORDS.includes(upper)) {
+      await supabase
+        .from("contacts")
+        .update({ sms_opt_in: true })
+        .eq("id", contact.id);
+      await removeOptOut(supabase, client.id, from);
     }
     if (upper === "HELP") {
       // acknowledged by carrier templates typically

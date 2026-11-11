@@ -15,6 +15,8 @@ import {
   shouldNudgeOwnerForSla,
 } from "@/lib/leads/speed-to-lead";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
+import { hasRepliedSince } from "@/lib/funnels/human-reply";
+import { hasRecentSend } from "@/lib/funnels/dedupe";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -309,6 +311,21 @@ export const missedCallTextBack = inngest.createFunction(
       return { skipped: true, reason: "opted_out" };
     }
 
+    const recentlyTexted = await hasRecentSend(supabase, {
+      clientId,
+      trigger: "missed_call_text_back",
+      phone: toPhone,
+    });
+    if (recentlyTexted) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "missed_call_text_back",
+        status: "skipped",
+        log: { from: toPhone, reason: "recently_texted" },
+      });
+      return { skipped: true, reason: "recently_texted" };
+    }
+
     const body = applyTemplate(
       auto.templateBody ??
         "Sorry we missed your call to {{business_name}}. How can we help?",
@@ -323,6 +340,15 @@ export const missedCallTextBack = inngest.createFunction(
         body,
       }),
     );
+
+    if (client.phone) {
+      await step.run("alert-owner-missed-call", async () =>
+        sms.send({
+          to: normalizePhone(client.phone!),
+          body: `Missed call from ${toPhone}. Auto-text sent.`,
+        }),
+      );
+    }
 
     await step.run("log-missed", async () => {
       await supabase.from("workflow_runs").insert({
@@ -350,11 +376,13 @@ export const appointmentReminder = inngest.createFunction(
         from?: string;
         clientId?: string;
         trigger?: string;
+        contactId?: string;
+        since?: string;
       };
     };
     step: Step;
   }) => {
-    const { to, body, from, clientId, trigger } = event.data;
+    const { to, body, from, clientId, trigger, contactId, since } = event.data;
     if (!to) return { skipped: true };
 
     let timeZone = "America/Chicago";
@@ -374,6 +402,24 @@ export const appointmentReminder = inngest.createFunction(
           log: { to },
         });
         return { skipped: true, reason: "opted_out" };
+      }
+
+      // Review funnels only — a human has taken over once the contact
+      // replies, so the remaining review-request reminders stop. This
+      // never applies to appointment_reminder/on_my_way.
+      if (
+        trigger === "review_request" &&
+        contactId &&
+        since &&
+        (await hasRepliedSince(supabase, contactId, since))
+      ) {
+        await supabase.from("workflow_runs").insert({
+          client_id: clientId,
+          trigger,
+          status: "skipped",
+          log: { to, contactId, reason: "replied" },
+        });
+        return { skipped: true, reason: "replied" };
       }
 
       const { data: client } = await supabase

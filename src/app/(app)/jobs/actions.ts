@@ -24,25 +24,28 @@ const DEFAULT_CHECKLIST = [
   { id: "3", label: "Collect photos", done: false },
 ];
 
-async function contactPhoneForJob(
+async function contactForJob(
   supabase: Awaited<ReturnType<typeof requireMembership>>["supabase"],
   jobId: string,
   clientId: string,
-): Promise<string | null> {
+): Promise<{ phone: string | null; contactId: string | null }> {
   const { data: job } = await supabase
     .from("jobs")
     .select("contact_id")
     .eq("id", jobId)
     .eq("client_id", clientId)
     .maybeSingle();
-  if (!job?.contact_id) return null;
+  if (!job?.contact_id) return { phone: null, contactId: null };
   const { data: contact } = await supabase
     .from("contacts")
     .select("phones")
     .eq("id", job.contact_id)
     .maybeSingle();
-  const phone = contact?.phones?.[0];
-  return phone ? normalizePhone(phone) : null;
+  const rawPhone = contact?.phones?.[0];
+  return {
+    phone: rawPhone ? normalizePhone(rawPhone) : null,
+    contactId: job.contact_id,
+  };
 }
 
 export async function createJob(formData: FormData) {
@@ -118,9 +121,11 @@ export async function updateJobStatus(input: {
     .eq("client_id", client.id);
   if (error) return { error: error.message };
 
+  const resolvedContact = await contactForJob(supabase, input.jobId, client.id);
   const phone =
     (input.contactPhone ? normalizePhone(input.contactPhone) : null) ||
-    (await contactPhoneForJob(supabase, input.jobId, client.id));
+    resolvedContact.phone;
+  const contactId = resolvedContact.contactId;
 
   const timeZone = client.timezone ?? "America/Chicago";
 
@@ -180,6 +185,10 @@ export async function updateJobStatus(input: {
         { business_name: client.business_name ?? "us" },
       )} ${client.google_review_url ?? ""}`.trim();
       const sendAt = nextSendableAt(new Date(), timeZone);
+      // "since" marks when this funnel started: appointmentReminder skips
+      // if the contact has replied at all after this point, since a human
+      // has taken over.
+      const since = new Date().toISOString();
       // Don't log "sent" here: appointmentReminder (the Inngest function
       // this event triggers) logs the real outcome itself once it actually
       // runs — including an "opted_out" skip. Logging "sent" at dispatch
@@ -194,6 +203,8 @@ export async function updateJobStatus(input: {
             body: reviewBody,
             clientId: client.id,
             trigger: "review_request",
+            contactId: contactId ?? undefined,
+            since,
           },
           ...(sendAt.getTime() > Date.now() + 5_000
             ? { ts: sendAt.getTime() }
