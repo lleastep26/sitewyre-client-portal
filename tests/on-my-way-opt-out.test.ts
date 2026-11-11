@@ -56,6 +56,8 @@ beforeEach(() => {
     business_name: "Test Co",
     twilio_phone_number: "+15555550100",
     timezone: "America/Chicago",
+    a2p_status: "approved",
+    phone: "+15550001111",
   };
 });
 
@@ -121,6 +123,34 @@ describe("updateJobStatus — on_my_way opt-out gate", () => {
     expect(workflowRuns[0]).toMatchObject({
       trigger: "on_my_way",
       status: "sent",
+    });
+  });
+
+  it("blocks the immediate SMS when A2P isn't approved, and logs why", async () => {
+    fakeClient = { ...(fakeClient as object), a2p_status: "pending" };
+    const workflowRuns: unknown[] = [];
+    fakeSupabase = {
+      from(table: string) {
+        if (table === "opt_outs") return makeTable({ data: null });
+        if (table === "workflow_runs") {
+          return makeTable({ data: null }, (row) => workflowRuns.push(row));
+        }
+        return makeTable();
+      },
+    };
+
+    const { updateJobStatus } = await import("@/app/(app)/jobs/actions");
+    await updateJobStatus({
+      jobId: "job1",
+      status: "en_route",
+      contactPhone: "+15559876543",
+    });
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(workflowRuns[0]).toMatchObject({
+      trigger: "on_my_way",
+      status: "skipped",
+      log: expect.objectContaining({ reason: "a2p_pending" }),
     });
   });
 });

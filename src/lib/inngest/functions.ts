@@ -21,6 +21,7 @@ import { nextFunnelSendableAt } from "@/lib/funnels/quiet-hours";
 import { shouldStopReviewDrip } from "@/lib/funnels/review-request-gate";
 import { shouldStopReviewBlast } from "@/lib/funnels/review-blast-gate";
 import { buildReviewBlastReminderMessage } from "@/lib/funnels/review-blast-message";
+import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -89,7 +90,7 @@ export const leadAutoReply = inngest.createFunction(
 
     const sms = getSmsProvider();
     const to = normalizePhone(phone);
-    if (to && client.twilio_phone_number) {
+    if (to && client.twilio_phone_number && checkA2pGate(client, to).allowed) {
       await step.run("sms-homeowner", async () =>
         sms.send({ to, from: client.twilio_phone_number ?? undefined, body }),
       );
@@ -182,6 +183,17 @@ export const leadUnansweredFollowUp = inngest.createFunction(
         business_name: client.business_name ?? "us",
       },
     );
+
+    const a2p = checkA2pGate(client, to);
+    if (!a2p.allowed) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "lead_unanswered_follow_up",
+        status: "skipped",
+        log: { leadId, phone: to, reason: a2p.reason },
+      });
+      return { skipped: true, reason: a2p.reason };
+    }
 
     await step.run("sms-follow-up", async () =>
       getSmsProvider().send({
@@ -337,13 +349,16 @@ export const missedCallTextBack = inngest.createFunction(
     );
 
     const sms = getSmsProvider();
-    await step.run("sms-missed", async () =>
-      sms.send({
-        to: toPhone,
-        from: client.twilio_phone_number!,
-        body,
-      }),
-    );
+    const a2p = checkA2pGate(client, toPhone);
+    if (a2p.allowed) {
+      await step.run("sms-missed", async () =>
+        sms.send({
+          to: toPhone,
+          from: client.twilio_phone_number!,
+          body,
+        }),
+      );
+    }
 
     if (client.phone) {
       await step.run("alert-owner-missed-call", async () =>
@@ -358,8 +373,8 @@ export const missedCallTextBack = inngest.createFunction(
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "missed_call_text_back",
-        status: "sent",
-        log: { from },
+        status: a2p.allowed ? "sent" : "skipped",
+        log: a2p.allowed ? { from } : { from, reason: a2p.reason },
       });
     });
 
@@ -415,10 +430,21 @@ export const appointmentReminder = inngest.createFunction(
 
       const { data: client } = await supabase
         .from("clients")
-        .select("timezone")
+        .select("timezone, a2p_status, phone")
         .eq("id", clientId)
         .maybeSingle();
       timeZone = client?.timezone ?? timeZone;
+
+      const a2p = checkA2pGate(client, to);
+      if (!a2p.allowed) {
+        await supabase.from("workflow_runs").insert({
+          client_id: clientId,
+          trigger: trigger ?? "appointment_reminder",
+          status: "skipped",
+          log: { to, reason: a2p.reason },
+        });
+        return { skipped: true, reason: a2p.reason };
+      }
     }
 
     await respectQuietHours(step, timeZone);
@@ -728,19 +754,25 @@ export const invoiceFollowUp = inngest.createFunction(
           text: body,
         });
       }
+      let a2pReason: string | undefined;
       if (phone && client.twilio_phone_number) {
-        await getSmsProvider().send({
-          to: phone,
-          from: client.twilio_phone_number,
-          body,
-        });
+        const a2p = checkA2pGate(client, phone);
+        if (a2p.allowed) {
+          await getSmsProvider().send({
+            to: phone,
+            from: client.twilio_phone_number,
+            body,
+          });
+        } else {
+          a2pReason = a2p.reason;
+        }
       }
 
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "invoice_reminder",
         status: email || phone ? "sent" : "skipped",
-        log: { invoiceId, attempt, remaining, email, phone },
+        log: { invoiceId, attempt, remaining, email, phone, a2pReason },
       });
       return { ok: true as const, attempt };
     }
@@ -823,6 +855,7 @@ export const quoteFollowUp = inngest.createFunction(
         link,
       });
 
+      let a2pReason: string | undefined;
       if (phone && client.twilio_phone_number) {
         if (await isOptedOut(supabase, clientId, phone, quote.contact_id)) {
           await logSkippedOptOut(supabase, {
@@ -831,11 +864,16 @@ export const quoteFollowUp = inngest.createFunction(
             log: { quoteId, attempt, phone },
           });
         } else {
-          await getSmsProvider().send({
-            to: phone,
-            from: client.twilio_phone_number,
-            body,
-          });
+          const a2p = checkA2pGate(client, phone);
+          if (a2p.allowed) {
+            await getSmsProvider().send({
+              to: phone,
+              from: client.twilio_phone_number,
+              body,
+            });
+          } else {
+            a2pReason = a2p.reason;
+          }
         }
       }
       if (email) {
@@ -851,7 +889,7 @@ export const quoteFollowUp = inngest.createFunction(
         client_id: clientId,
         trigger: "quote_follow_up",
         status: phone || email ? "sent" : "skipped",
-        log: { quoteId, attempt, phone, email },
+        log: { quoteId, attempt, phone, email, a2pReason },
       });
       return { ok: true as const, attempt };
     }
@@ -916,6 +954,17 @@ export const rebookingNudge = inngest.createFunction(
         log: { jobId, phone },
       });
       return { skipped: true, reason: "opted_out" };
+    }
+
+    const a2p = checkA2pGate(client, phone);
+    if (!a2p.allowed) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "rebooking_nudge",
+        status: "skipped",
+        log: { jobId, phone, reason: a2p.reason },
+      });
+      return { skipped: true, reason: a2p.reason };
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

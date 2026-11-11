@@ -11,10 +11,10 @@ export default async function AdminPage() {
   const cookieStore = await cookies();
   const currentClientId = cookieStore.get(ADMIN_VIEW_COOKIE)?.value;
 
-  const { data: clients } = await supabase
+  const { data: clients, error } = await supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds",
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone",
     )
     .order("business_name", { ascending: true });
 
@@ -26,6 +26,12 @@ export default async function AdminPage() {
         </p>
         <h1 className="mt-1 font-display text-2xl">All clients</h1>
       </header>
+
+      {error ? (
+        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          Couldn&apos;t load clients: {error.message}
+        </p>
+      ) : null}
 
       <ul className="mt-4 space-y-2">
         {(clients ?? []).map((c) => {
@@ -64,6 +70,15 @@ export default async function AdminPage() {
               <div className="mt-2">
                 <A2pStatusSelect clientId={c.id} status={c.a2p_status} />
               </div>
+              {c.a2p_status !== "approved" ? (
+                <p className="mt-1 text-xs text-red-600">
+                  Texting is blocked (A2P status: {c.a2p_status ?? "pending"})
+                  {c.phone
+                    ? ` — except contractor alerts to ${c.phone}`
+                    : ""}
+                  .
+                </p>
+              ) : null}
               <CallRoutingForm
                 clientId={c.id}
                 forwardPhone={c.forward_to_phone}
@@ -75,7 +90,7 @@ export default async function AdminPage() {
         })}
       </ul>
 
-      {!clients?.length ? (
+      {!error && !clients?.length ? (
         <p className="mt-6 text-sm text-charcoal/60">No clients yet.</p>
       ) : null}
     </div>

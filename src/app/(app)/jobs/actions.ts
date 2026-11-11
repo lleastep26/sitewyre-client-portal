@@ -19,6 +19,7 @@ import { normalizePhone } from "@/lib/utils";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
 import { hasRecentReviewRequest } from "@/lib/funnels/recent-review-request";
+import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -155,13 +156,10 @@ export async function updateJobStatus(input: {
         { business_name: client.business_name ?? "us" },
       );
       const sendAt = nextSendableAt(new Date(), timeZone);
-      if (sendAt.getTime() <= Date.now() + 5_000) {
-        await getSmsProvider().send({
-          to: phone,
-          from: client.twilio_phone_number,
-          body,
-        });
-      } else {
+      const deferred = sendAt.getTime() > Date.now() + 5_000;
+      const a2p = deferred ? null : checkA2pGate(client, phone);
+
+      if (deferred) {
         await inngest
           .send({
             name: "portal/appointment.reminder",
@@ -175,15 +173,22 @@ export async function updateJobStatus(input: {
             ts: sendAt.getTime(),
           })
           .catch(() => undefined);
+      } else if (a2p?.allowed) {
+        await getSmsProvider().send({
+          to: phone,
+          from: client.twilio_phone_number,
+          body,
+        });
       }
+
       await supabase.from("workflow_runs").insert({
         client_id: client.id,
         trigger: "on_my_way",
-        status: "sent",
-        log: {
-          jobId: input.jobId,
-          deferred: sendAt.getTime() > Date.now() + 5_000,
-        },
+        status: !deferred && a2p && !a2p.allowed ? "skipped" : "sent",
+        log:
+          !deferred && a2p && !a2p.allowed
+            ? { jobId: input.jobId, reason: a2p.reason }
+            : { jobId: input.jobId, deferred },
       });
     }
   }

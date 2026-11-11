@@ -27,10 +27,13 @@ const BASE_PARAMS = {
   reviewToken: "tok123",
 };
 
+const APPROVED_CLIENT = { data: { a2p_status: "approved", phone: "+19995550000" } };
+
 describe("shouldStopReviewDrip", () => {
   it("stops when the automation is disabled", async () => {
     const supabase = fakeSupabase({
       client_automations: { data: { enabled: false, template_body: null } },
+      clients: APPROVED_CLIENT,
     });
     expect(await shouldStopReviewDrip(supabase, BASE_PARAMS)).toEqual({
       stop: true,
@@ -38,9 +41,38 @@ describe("shouldStopReviewDrip", () => {
     });
   });
 
+  it("stops when A2P isn't approved, before checking opt-out/reply/click", async () => {
+    const supabase = fakeSupabase({
+      client_automations: { data: null },
+      clients: { data: { a2p_status: "pending", phone: "+19995550000" } },
+      opt_outs: { data: null },
+      messages: { data: null },
+      review_links: { data: { clicked_at: null } },
+    });
+    expect(await shouldStopReviewDrip(supabase, BASE_PARAMS)).toEqual({
+      stop: true,
+      reason: "a2p_pending",
+    });
+  });
+
+  it("does not stop on A2P when the destination is the client's own phone (contractor alert)", async () => {
+    const supabase = fakeSupabase({
+      client_automations: { data: null },
+      clients: { data: { a2p_status: "pending", phone: BASE_PARAMS.phone } },
+      opt_outs: { data: null },
+      messages: { data: null },
+      review_links: { data: { clicked_at: null } },
+    });
+    expect(await shouldStopReviewDrip(supabase, BASE_PARAMS)).toEqual({
+      stop: false,
+      templateBody: null,
+    });
+  });
+
   it("stops when the phone is opted out", async () => {
     const supabase = fakeSupabase({
       client_automations: { data: null },
+      clients: APPROVED_CLIENT,
       opt_outs: { data: { phone: BASE_PARAMS.phone } },
     });
     expect(await shouldStopReviewDrip(supabase, BASE_PARAMS)).toEqual({
@@ -52,6 +84,7 @@ describe("shouldStopReviewDrip", () => {
   it("stops when the contact has replied since the funnel started", async () => {
     const supabase = fakeSupabase({
       client_automations: { data: null },
+      clients: APPROVED_CLIENT,
       opt_outs: { data: null },
       messages: { data: { id: "msg1" } },
     });
@@ -64,6 +97,7 @@ describe("shouldStopReviewDrip", () => {
   it("stops once the tracked link has been clicked", async () => {
     const supabase = fakeSupabase({
       client_automations: { data: null },
+      clients: APPROVED_CLIENT,
       opt_outs: { data: null },
       messages: { data: null },
       review_links: { data: { clicked_at: "2026-01-01T00:00:00Z" } },
@@ -79,6 +113,7 @@ describe("shouldStopReviewDrip", () => {
       client_automations: {
         data: { enabled: true, template_body: "Custom {{review_link}}" },
       },
+      clients: APPROVED_CLIENT,
       opt_outs: { data: null },
       messages: { data: null },
       review_links: { data: { clicked_at: null } },

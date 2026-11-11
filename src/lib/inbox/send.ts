@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import type { ClientRow, Database } from "@/lib/supabase/types";
+import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 
 export type SendInboxInput = {
   contactId: string;
@@ -41,6 +42,12 @@ export async function sendInboxMessageForClient(
     }
     if (contact.sms_opt_in === false) {
       return { error: "Contact opted out of SMS" };
+    }
+    const a2p = checkA2pGate(client, phone);
+    if (!a2p.allowed) {
+      return {
+        error: `Texting is blocked: A2P registration isn't approved (status: ${client.a2p_status ?? "pending"}).`,
+      };
     }
     await getSmsProvider().send({
       to: phone,

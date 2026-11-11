@@ -6,6 +6,7 @@ import { requireMembership } from "@/lib/auth/session";
 import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import { getAppUrl } from "@/lib/supabase/env";
 import { inngest } from "@/lib/inngest/client";
+import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 
 export async function createQuote(formData: FormData) {
   const { supabase, client } = await requireMembership();
@@ -69,7 +70,11 @@ export async function sendQuote(quoteId: string) {
     contact = data;
   }
 
-  if (contact?.phones?.[0] && client.twilio_phone_number) {
+  if (
+    contact?.phones?.[0] &&
+    client.twilio_phone_number &&
+    checkA2pGate(client, contact.phones[0]).allowed
+  ) {
     await getSmsProvider().send({
       to: contact.phones[0],
       from: client.twilio_phone_number,
