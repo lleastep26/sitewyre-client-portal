@@ -37,6 +37,29 @@ describe("zonedTimeToUtc", () => {
   });
 });
 
+describe("planBlastSchedule — mid-day import", () => {
+  it("never schedules a slot in the past when the import happens mid-afternoon", () => {
+    // 3:07pm America/Chicago — well past the 9am window open, the exact
+    // real-world case that first surfaced this: slot 0 (9am) had already
+    // passed, so an Inngest sleepUntil for it would fire immediately
+    // instead of respecting the window.
+    const midAfternoon = new Date("2026-01-15T21:07:00.000Z");
+    const rows = [{ phone: "+15550001" }];
+    const [scheduled] = planBlastSchedule(rows, { timeZone: TZ, now: midAfternoon });
+    expect(scheduled.firstSendAt.getTime()).toBeGreaterThan(midAfternoon.getTime());
+  });
+
+  it("pushes to day 1 when the import happens after the window has closed", () => {
+    const afterClose = new Date("2026-01-16T02:00:00.000Z"); // 8pm Chicago, Jan 15
+    const rows = [{ phone: "+15550001" }];
+    const [scheduled] = planBlastSchedule(rows, { timeZone: TZ, now: afterClose });
+    const sameDay = dayKey(afterClose, TZ);
+    const scheduledDay = dayKey(scheduled.firstSendAt, TZ);
+    expect(scheduledDay).not.toBe(sameDay);
+    expect(scheduled.firstSendAt.getTime()).toBeGreaterThan(afterClose.getTime());
+  });
+});
+
 describe("planBlastSchedule", () => {
   it("schedules every send within the 9am-7pm local window", () => {
     const rows = Array.from({ length: 10 }, (_, i) => ({ phone: `+1555000${i}` }));

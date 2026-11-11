@@ -105,8 +105,19 @@ export function planBlastSchedule<T>(
   const base = localParts(now, opts.timeZone);
   const baseDateUtcMs = Date.UTC(base.year, base.month - 1, base.day);
 
+  // Day 0's slots start at 9am regardless of when "now" actually is — if
+  // the import happens mid-afternoon, slot 0 (9am) is already in the
+  // past. Treat every slot time at/before now as already "used" today,
+  // so the first slot actually assigned is the next one still in the
+  // future (or day 1 entirely, once today's window has fully elapsed).
+  const nowMinutesIntoWindow = (base.hour - WINDOW_START_HOUR) * 60 + base.minute;
+  const slotsElapsedToday =
+    nowMinutesIntoWindow <= 0
+      ? 0
+      : Math.min(BLAST_DAILY_CAP, Math.ceil(nowMinutesIntoWindow / SLOT_SPACING_MINUTES));
+
   const usage = new Map<number, number>();
-  usage.set(0, opts.alreadySentToday ?? 0);
+  usage.set(0, Math.max(opts.alreadySentToday ?? 0, slotsElapsedToday));
   const usageOn = (day: number) => usage.get(day) ?? 0;
 
   function reserve(minDayOffset: number): { dayOffset: number; slotIndex: number } {
