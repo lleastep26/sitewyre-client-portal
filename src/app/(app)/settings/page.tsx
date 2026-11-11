@@ -203,6 +203,21 @@ export default async function SettingsPage({
               placeholder="https://g.page/r/..."
             />
           </div>
+          <div>
+            <Label htmlFor="google_place_id">Google Place ID</Label>
+            <Input
+              id="google_place_id"
+              name="google_place_id"
+              defaultValue={client.google_place_id ?? ""}
+              placeholder="ChIJ..."
+            />
+          </div>
+          {!client.google_review_url && !client.google_place_id ? (
+            <p className="text-sm text-amber-700">
+              Review requests are off until you add a Google review URL or
+              Place ID above.
+            </p>
+          ) : null}
           <Button type="submit" className="w-full">
             Save
           </Button>

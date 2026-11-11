@@ -2,6 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "./env";
 
+export function isPublicPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/book/") ||
+    pathname.startsWith("/q/") ||
+    pathname.startsWith("/pay/") ||
+    pathname.startsWith("/r/") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js"
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -30,13 +42,7 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthPage =
     pathname.startsWith("/login") || pathname.startsWith("/auth");
-  const isPublic =
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/book/") ||
-    pathname.startsWith("/q/") ||
-    pathname.startsWith("/pay/") ||
-    pathname === "/manifest.webmanifest" ||
-    pathname === "/sw.js";
+  const isPublic = isPublicPath(pathname);
 
   if (!user && !isAuthPage && !isPublic) {
     const redirectUrl = request.nextUrl.clone();

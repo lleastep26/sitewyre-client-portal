@@ -378,11 +378,13 @@ export const appointmentReminder = inngest.createFunction(
         trigger?: string;
         contactId?: string;
         since?: string;
+        reviewToken?: string;
       };
     };
     step: Step;
   }) => {
-    const { to, body, from, clientId, trigger, contactId, since } = event.data;
+    const { to, body, from, clientId, trigger, contactId, since, reviewToken } =
+      event.data;
     if (!to) return { skipped: true };
 
     let timeZone = "America/Chicago";
@@ -420,6 +422,25 @@ export const appointmentReminder = inngest.createFunction(
           log: { to, contactId, reason: "replied" },
         });
         return { skipped: true, reason: "replied" };
+      }
+
+      // Review funnels only — stop remaining reminders once the tracked
+      // link has been clicked.
+      if (trigger === "review_request" && reviewToken) {
+        const { data: link } = await supabase
+          .from("review_links")
+          .select("clicked_at")
+          .eq("token", reviewToken)
+          .maybeSingle();
+        if (link?.clicked_at) {
+          await supabase.from("workflow_runs").insert({
+            client_id: clientId,
+            trigger,
+            status: "skipped",
+            log: { to, reviewToken, reason: "clicked" },
+          });
+          return { skipped: true, reason: "clicked" };
+        }
       }
 
       const { data: client } = await supabase

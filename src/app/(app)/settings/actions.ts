@@ -11,13 +11,14 @@ export async function updateSettings(formData: FormData): Promise<void> {
   if (!["owner", "office", "sitewyre_admin"].includes(role)) return;
 
   const googleReviewUrl = String(formData.get("google_review_url") ?? "").trim();
+  const googlePlaceId = String(formData.get("google_place_id") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "America/Chicago");
   const phone = String(formData.get("phone") ?? "").trim();
   const serviceArea = String(formData.get("service_area") ?? "").trim();
 
   const checklist = {
     ...((client.setup_checklist as Record<string, boolean> | null) ?? {}),
-    google_review: Boolean(googleReviewUrl),
+    google_review: Boolean(googleReviewUrl || googlePlaceId),
     verify_phone: Boolean(phone || client.twilio_phone_number),
   };
 
@@ -25,6 +26,7 @@ export async function updateSettings(formData: FormData): Promise<void> {
     .from("clients")
     .update({
       google_review_url: googleReviewUrl || null,
+      google_place_id: googlePlaceId || null,
       timezone,
       phone: phone || client.phone,
       service_area: serviceArea || null,

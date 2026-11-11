@@ -17,6 +17,8 @@ import {
 } from "@/lib/automations";
 import { normalizePhone } from "@/lib/utils";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
+import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
+import { getAppUrl } from "@/lib/supabase/env";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -178,12 +180,19 @@ export async function updateJobStatus(input: {
 
   if (input.status === "complete") {
     const auto = await getAutomationState(supabase, client.id, "review_request");
-    if (auto.enabled && phone && client.twilio_phone_number) {
+    const reviewDestination = resolveGoogleReviewUrl(client);
+    if (auto.enabled && phone && client.twilio_phone_number && reviewDestination) {
+      const { data: reviewLink } = await supabase
+        .from("review_links")
+        .insert({ client_id: client.id, contact_id: contactId })
+        .select("token")
+        .single();
+      const reviewUrl = reviewLink ? `${getAppUrl()}/r/${reviewLink.token}` : "";
       const reviewBody = `${applyTemplate(
         auto.templateBody ??
           "Thanks for choosing {{business_name}}! Mind leaving a quick review?",
         { business_name: client.business_name ?? "us" },
-      )} ${client.google_review_url ?? ""}`.trim();
+      )} ${reviewUrl}`.trim();
       const sendAt = nextSendableAt(new Date(), timeZone);
       // "since" marks when this funnel started: appointmentReminder skips
       // if the contact has replied at all after this point, since a human
@@ -205,6 +214,7 @@ export async function updateJobStatus(input: {
             trigger: "review_request",
             contactId: contactId ?? undefined,
             since,
+            reviewToken: reviewLink?.token,
           },
           ...(sendAt.getTime() > Date.now() + 5_000
             ? { ts: sendAt.getTime() }
@@ -217,6 +227,13 @@ export async function updateJobStatus(input: {
         trigger: "review_request",
         status: "skipped",
         log: { jobId: input.jobId, reason: "disabled" },
+      });
+    } else if (auto.enabled && !reviewDestination) {
+      await supabase.from("workflow_runs").insert({
+        client_id: client.id,
+        trigger: "review_request",
+        status: "skipped",
+        log: { jobId: input.jobId, reason: "no_review_destination" },
       });
     }
 
