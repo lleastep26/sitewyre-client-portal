@@ -14,6 +14,7 @@ import {
   SPEED_TO_LEAD_SLA_SLEEP,
   shouldNudgeOwnerForSla,
 } from "@/lib/leads/speed-to-lead";
+import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -298,6 +299,16 @@ export const missedCallTextBack = inngest.createFunction(
 
     await respectQuietHours(step, client.timezone ?? "America/Chicago");
 
+    const toPhone = normalizePhone(from);
+    if (await isOptedOut(supabase, clientId, toPhone)) {
+      await logSkippedOptOut(supabase, {
+        clientId,
+        trigger: "missed_call_text_back",
+        log: { from: toPhone },
+      });
+      return { skipped: true, reason: "opted_out" };
+    }
+
     const body = applyTemplate(
       auto.templateBody ??
         "Sorry we missed your call to {{business_name}}. How can we help?",
@@ -307,7 +318,7 @@ export const missedCallTextBack = inngest.createFunction(
     const sms = getSmsProvider();
     await step.run("sms-missed", async () =>
       sms.send({
-        to: normalizePhone(from),
+        to: toPhone,
         from: client.twilio_phone_number!,
         body,
       }),
@@ -355,6 +366,15 @@ export const appointmentReminder = inngest.createFunction(
           : "appointment_reminder";
       const auto = await getAutomationState(supabase, clientId, gateKey);
       if (!auto.enabled) return { skipped: true, reason: "disabled" };
+
+      if (await isOptedOut(supabase, clientId, to)) {
+        await logSkippedOptOut(supabase, {
+          clientId,
+          trigger: trigger ?? "appointment_reminder",
+          log: { to },
+        });
+        return { skipped: true, reason: "opted_out" };
+      }
 
       const { data: client } = await supabase
         .from("clients")
@@ -608,11 +628,19 @@ export const quoteFollowUp = inngest.createFunction(
       });
 
       if (phone && client.twilio_phone_number) {
-        await getSmsProvider().send({
-          to: phone,
-          from: client.twilio_phone_number,
-          body,
-        });
+        if (await isOptedOut(supabase, clientId, phone, quote.contact_id)) {
+          await logSkippedOptOut(supabase, {
+            clientId,
+            trigger: "quote_follow_up",
+            log: { quoteId, attempt, phone },
+          });
+        } else {
+          await getSmsProvider().send({
+            to: phone,
+            from: client.twilio_phone_number,
+            body,
+          });
+        }
       }
       if (email) {
         await getEmailProvider().send({
@@ -684,6 +712,15 @@ export const rebookingNudge = inngest.createFunction(
     if (!phone) return { skipped: true, reason: "no_phone" };
 
     await respectQuietHours(step, client.timezone ?? "America/Chicago", "quiet-rebook");
+
+    if (await isOptedOut(supabase, clientId, phone, job.contact_id)) {
+      await logSkippedOptOut(supabase, {
+        clientId,
+        trigger: "rebooking_nudge",
+        log: { jobId, phone },
+      });
+      return { skipped: true, reason: "opted_out" };
+    }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const link = `${appUrl}/book/${client.site_key}`;

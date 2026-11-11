@@ -301,6 +301,30 @@ export type Database = {
         auth: string;
         created_at: string;
       }>;
+      opt_outs: TableDef<{
+        client_id: string;
+        phone: string;
+        created_at: string;
+      }>;
+      review_links: TableDef<{
+        token: string;
+        client_id: string;
+        contact_id: string | null;
+        funnel_run_id: string | null;
+        created_at: string;
+        clicked_at: string | null;
+      }>;
+      imports: TableDef<{
+        id: string;
+        client_id: string;
+        file_name: string;
+        total_rows: number;
+        valid_rows: number;
+        skipped_rows: number;
+        consent_confirmed_by: string | null;
+        consent_confirmed_at: string | null;
+        created_at: string;
+      }>;
     };
     Views: Record<string, never>;
     Functions: {
