@@ -16,6 +16,7 @@ import {
   getAutomationState,
 } from "@/lib/automations";
 import { normalizePhone } from "@/lib/utils";
+import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -125,7 +126,13 @@ export async function updateJobStatus(input: {
 
   if (input.status === "en_route" && phone && client.twilio_phone_number) {
     const auto = await getAutomationState(supabase, client.id, "on_my_way");
-    if (auto.enabled) {
+    if (auto.enabled && (await isOptedOut(supabase, client.id, phone))) {
+      await logSkippedOptOut(supabase, {
+        clientId: client.id,
+        trigger: "on_my_way",
+        log: { jobId: input.jobId, phone },
+      });
+    } else if (auto.enabled) {
       const body = applyTemplate(
         auto.templateBody ?? "{{business_name}}: we're on the way.",
         { business_name: client.business_name ?? "us" },
