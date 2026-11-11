@@ -4,6 +4,7 @@ import { inngest } from "@/lib/inngest/client";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { normalizePhone } from "@/lib/utils";
 import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
+import { isLocalDevBypassAllowed } from "@/lib/twilio/validate";
 import twilio from "twilio";
 
 // Exact whole-message match only, trimmed + case-insensitive — "Stop by
@@ -19,7 +20,7 @@ function validateTwilio(request: Request, params: URLSearchParams) {
   const url = process.env.NEXT_PUBLIC_APP_URL
     ? `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/webhook`
     : request.url;
-  if (!authToken || !signature) return process.env.NODE_ENV !== "production";
+  if (!authToken || !signature) return isLocalDevBypassAllowed();
   const data: Record<string, string> = {};
   params.forEach((v, k) => {
     data[k] = v;
