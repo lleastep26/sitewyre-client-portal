@@ -1,6 +1,6 @@
 import { requireMembership } from "@/lib/auth/session";
 import { LeadsBoard } from "@/components/leads/board";
-import { createLead } from "./actions";
+import { createLeadAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,7 @@ export default async function LeadsPage({
       </header>
 
       {params.new ? (
-        <form action={async (fd) => { await createLead(fd); }} className="mx-4 space-y-2 rounded-xl border border-charcoal/10 bg-white p-4">
+        <form action={createLeadAction} className="mx-4 space-y-2 rounded-xl border border-charcoal/10 bg-white p-4">
           <Input name="name" placeholder="Name" required />
           <Input name="phone" placeholder="Phone" required />
           <Input name="email" placeholder="Email" type="email" />

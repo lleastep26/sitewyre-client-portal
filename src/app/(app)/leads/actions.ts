@@ -51,6 +51,10 @@ export async function moveLead(input: {
   return { ok: true };
 }
 
+export async function createLeadAction(formData: FormData): Promise<void> {
+  await createLead(formData);
+}
+
 export async function createLead(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
   if (!client) return { error: "No client" };

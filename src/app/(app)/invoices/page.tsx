@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
-import { createInvoice } from "./actions";
+import { createInvoiceAction } from "./actions";
 import { InvoiceActions } from "./invoice-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ export default async function InvoicesPage({
       </header>
 
       {params.new || params.from_job ? (
-        <form action={async (fd) => { await createInvoice(fd); }} className="space-y-2 rounded-xl border bg-white p-4">
+        <form action={createInvoiceAction} className="space-y-2 rounded-xl border bg-white p-4">
           {params.from_job ? (
             <input type="hidden" name="job_id" value={params.from_job} />
           ) : null}

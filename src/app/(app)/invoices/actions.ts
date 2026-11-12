@@ -10,6 +10,10 @@ import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 import { resolveEmailFromAddress } from "@/lib/email/from-address";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 
+export async function createInvoiceAction(formData: FormData): Promise<void> {
+  await createInvoice(formData);
+}
+
 export async function createInvoice(formData: FormData) {
   const { supabase, client } = await requireMembership();
   if (!client) return { error: "No client" };
