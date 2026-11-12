@@ -6,10 +6,12 @@ import { ProfileMenu } from "./profile-menu";
 
 export function Topbar({
   businessName,
+  logoUrl,
   email,
   onMenuClick,
 }: {
   businessName: string | null;
+  logoUrl: string | null;
   email: string | null;
   onMenuClick: () => void;
 }) {
@@ -27,9 +29,18 @@ export function Topbar({
       </button>
 
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-copper text-sm font-semibold text-white">
-          {initial}
-        </span>
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt={businessName ?? "Business logo"}
+            className="h-8 w-8 shrink-0 rounded-full object-contain"
+          />
+        ) : (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-copper text-sm font-semibold text-white">
+            {initial}
+          </span>
+        )}
         <span className="truncate font-display text-base text-charcoal">
           {businessName ?? "Sitewyre"}
         </span>

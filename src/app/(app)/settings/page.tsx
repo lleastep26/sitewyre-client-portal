@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { ConnectStripeButton } from "./connect-stripe-button";
+import { SettingsTabs } from "./settings-tabs";
+import { BusinessProfileTab } from "./business-profile-tab";
 import {
   ensureDefaultAvailability,
   weekdayLabel,
@@ -83,7 +85,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ stripe?: string }>;
 }) {
   const params = await searchParams;
-  const { supabase, client, user } = await requireMembership();
+  const { supabase, client, user, role } = await requireMembership();
   if (!client) {
     return (
       <div className="px-4 py-8 text-sm text-charcoal/70">
@@ -155,13 +157,10 @@ export default async function SettingsPage({
     .eq("client_id", client.id)
     .order("name");
 
-  return (
-    <div className="space-y-4 px-4 pb-10">
-      <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-copper">Settings</p>
-        <h1 className="mt-1 font-display text-3xl">Account</h1>
-      </header>
+  const canEditBusinessProfile = role === "owner" || role === "sitewyre_admin";
 
+  const generalTab = (
+    <div className="space-y-4">
       {availabilityError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           Couldn’t load booking hours: {availabilityError.message}
@@ -173,34 +172,17 @@ export default async function SettingsPage({
         <CardDescription className="mt-1">
           Site key: <code className="text-xs">{client.site_key}</code>
         </CardDescription>
+        <p className="mt-2 text-xs text-charcoal/50">
+          Owner name, business phone and timezone moved to the Business
+          Profile tab.
+        </p>
         <form action={updateSettings} className="mt-3 space-y-3">
-          <div>
-            <Label htmlFor="owner_name">Owner name</Label>
-            <Input
-              id="owner_name"
-              name="owner_name"
-              defaultValue={client.owner_name ?? ""}
-              placeholder="Used in review-blast texts (e.g. it's Sam from Acme Cleaning)"
-            />
-          </div>
-          <div>
-            <Label htmlFor="phone">Business phone</Label>
-            <Input id="phone" name="phone" defaultValue={client.phone ?? ""} />
-          </div>
           <div>
             <Label htmlFor="service_area">Service area</Label>
             <Input
               id="service_area"
               name="service_area"
               defaultValue={client.service_area ?? ""}
-            />
-          </div>
-          <div>
-            <Label htmlFor="timezone">Timezone</Label>
-            <Input
-              id="timezone"
-              name="timezone"
-              defaultValue={client.timezone ?? "America/Chicago"}
             />
           </div>
           <div>
@@ -437,6 +419,41 @@ export default async function SettingsPage({
           Sign out
         </Button>
       </form>
+    </div>
+  );
+
+  const businessProfileTab = (
+    <BusinessProfileTab
+      canEdit={canEditBusinessProfile}
+      canEditDomain={role === "sitewyre_admin"}
+      initial={{
+        business_name: client.business_name ?? "",
+        legal_business_name: client.legal_business_name ?? "",
+        owner_name: client.owner_name ?? "",
+        business_email: client.business_email ?? "",
+        phone: client.phone ?? "",
+        website: client.website ?? "",
+        domain: client.domain ?? "",
+        trade: client.trade ?? "other",
+        address_line1: client.address_line1 ?? "",
+        city: client.city ?? "",
+        state: client.state ?? "",
+        postal_code: client.postal_code ?? "",
+        country: client.country ?? "US",
+        timezone: client.timezone ?? "America/Chicago",
+        logo_url: client.logo_url ?? null,
+      }}
+    />
+  );
+
+  return (
+    <div className="space-y-4 px-4 pb-10">
+      <header>
+        <p className="text-xs uppercase tracking-[0.2em] text-copper">Settings</p>
+        <h1 className="mt-1 font-display text-3xl">Account</h1>
+      </header>
+
+      <SettingsTabs general={generalTab} businessProfile={businessProfileTab} />
     </div>
   );
 }

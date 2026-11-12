@@ -15,12 +15,14 @@ function persistCollapsed(value: boolean) {
 
 export function AppShell({
   businessName,
+  logoUrl,
   email,
   isAdmin,
   initialCollapsed,
   children,
 }: {
   businessName: string | null;
+  logoUrl: string | null;
   email: string | null;
   isAdmin: boolean;
   initialCollapsed: boolean;
@@ -95,6 +97,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           businessName={businessName}
+          logoUrl={logoUrl}
           email={email}
           onMenuClick={() => setMobileOpen(true)}
         />

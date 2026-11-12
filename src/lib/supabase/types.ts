@@ -24,6 +24,15 @@ export type ClientRow = {
   a2p_status: string | null;
   forward_to_phone: string | null;
   dial_timeout_seconds: number;
+  legal_business_name: string | null;
+  business_email: string | null;
+  website: string | null;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string;
+  logo_url: string | null;
   stripe_connect_account_id: string | null;
   setup_checklist: Record<string, boolean> | null;
   created_at: string;

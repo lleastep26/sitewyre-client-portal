@@ -19,6 +19,7 @@ export default async function AppLayout({
     <div className="text-charcoal">
       <AppShell
         businessName={client?.business_name ?? null}
+        logoUrl={client?.logo_url ?? null}
         email={user.email ?? null}
         isAdmin={isAdmin}
         initialCollapsed={initialCollapsed}

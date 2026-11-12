@@ -12,15 +12,12 @@ export async function updateSettings(formData: FormData): Promise<void> {
 
   const googleReviewUrl = String(formData.get("google_review_url") ?? "").trim();
   const googlePlaceId = String(formData.get("google_place_id") ?? "").trim();
-  const ownerName = String(formData.get("owner_name") ?? "").trim();
-  const timezone = String(formData.get("timezone") ?? "America/Chicago");
-  const phone = String(formData.get("phone") ?? "").trim();
   const serviceArea = String(formData.get("service_area") ?? "").trim();
 
   const checklist = {
     ...((client.setup_checklist as Record<string, boolean> | null) ?? {}),
     google_review: Boolean(googleReviewUrl || googlePlaceId),
-    verify_phone: Boolean(phone || client.twilio_phone_number),
+    verify_phone: Boolean(client.phone || client.twilio_phone_number),
   };
 
   await supabase
@@ -28,9 +25,6 @@ export async function updateSettings(formData: FormData): Promise<void> {
     .update({
       google_review_url: googleReviewUrl || null,
       google_place_id: googlePlaceId || null,
-      owner_name: ownerName || null,
-      timezone,
-      phone: phone || client.phone,
       service_area: serviceArea || null,
       setup_checklist: checklist,
       updated_at: new Date().toISOString(),
