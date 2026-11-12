@@ -5,6 +5,7 @@ import { requireMembership } from "@/lib/auth/session";
 import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 
 export async function createAppointment(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
@@ -40,7 +41,7 @@ export async function createAppointment(formData: FormData) {
 
   await enqueueAppointmentSms({
     to: client.phone,
-    from: client.twilio_phone_number,
+    from: resolveSmsFrom(client)!,
     businessName: client.business_name ?? "us",
     title,
     startAt,

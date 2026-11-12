@@ -14,6 +14,7 @@ import {
   startOfTodayInTimeZone,
 } from "@/lib/funnels/blast-schedule";
 import type { ClientRow } from "@/lib/supabase/types";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 
 /** Shared across preview and confirm — both must refuse to run under the
  * same conditions, with a message the page can show directly. */
@@ -136,7 +137,7 @@ export async function confirmReviewBlast(formData: FormData) {
           clientId: client.id,
           contactId: contact.id,
           phone: row.phone,
-          from: client.twilio_phone_number,
+          from: resolveSmsFrom(client)!,
           reviewToken: reviewLink.token,
           firstName,
           firstMessageBody,

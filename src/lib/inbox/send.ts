@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import type { ClientRow, Database } from "@/lib/supabase/types";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { resolveEmailFromAddress } from "@/lib/email/from-address";
 
 export type SendInboxInput = {
@@ -52,7 +53,7 @@ export async function sendInboxMessageForClient(
     }
     await getSmsProvider().send({
       to: phone,
-      from: client.twilio_phone_number,
+      from: resolveSmsFrom(client)!,
       body,
     });
   }

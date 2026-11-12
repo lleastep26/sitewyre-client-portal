@@ -7,6 +7,7 @@ import { isSlotAvailable } from "@/lib/scheduling/slots";
 import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 
 export async function bookAppointment(siteKey: string, formData: FormData) {
   const supabase = createAdminClient();
@@ -107,7 +108,7 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
 
   await enqueueAppointmentSms({
     to: phone,
-    from: client.twilio_phone_number,
+    from: resolveSmsFrom(client)!,
     businessName: client.business_name ?? "us",
     title,
     startAt: start,

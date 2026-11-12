@@ -8,6 +8,7 @@ import { getAppUrl } from "@/lib/supabase/env";
 import { inngest } from "@/lib/inngest/client";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 import { resolveEmailFromAddress } from "@/lib/email/from-address";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 
 export async function createQuote(formData: FormData) {
   const { supabase, client } = await requireMembership();
@@ -78,7 +79,7 @@ export async function sendQuote(quoteId: string) {
   ) {
     await getSmsProvider().send({
       to: contact.phones[0],
-      from: client.twilio_phone_number,
+      from: resolveSmsFrom(client)!,
       body: `Your quote from ${client.business_name}: ${link}`,
     });
   }

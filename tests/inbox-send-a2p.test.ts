@@ -81,7 +81,29 @@ describe("sendInboxMessageForClient — A2P gate", () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ from: "+15550009999" }));
+  });
+
+  it("sends through the client's own Messaging Service once a campaign is approved", async () => {
+    sendSpy.mockClear();
+    const { sendInboxMessageForClient } = await import("@/lib/inbox/send");
+    const client = {
+      id: "client1",
+      business_name: "Acme",
+      twilio_phone_number: "+15550009999",
+      a2p_status: "approved",
+      a2p_pipeline: { messagingServiceSid: "MGabc123" },
+      phone: "+15550001111",
+    } as never;
+
+    const result = await sendInboxMessageForClient(fakeSupabase(CONTACT), client, {
+      contactId: "contact1",
+      channel: "sms",
+      body: "hi there",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ from: "MGabc123" }));
   });
 
   it("still allows a reply to the client's own phone even when A2P isn't approved", async () => {

@@ -23,6 +23,10 @@ import { shouldStopReviewBlast } from "@/lib/funnels/review-blast-gate";
 import { buildReviewBlastReminderMessage } from "@/lib/funnels/review-blast-message";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 import { resolveEmailFromAddress } from "@/lib/email/from-address";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { advanceA2pPipeline, type A2pPipelineState } from "@/lib/a2p/pipeline";
+import { buildA2pBusinessInfo } from "@/lib/a2p/business-info";
+import { decryptEin } from "@/lib/a2p/encryption";
 import { refreshEmailDomain } from "@/lib/email/resend-domains";
 
 type LeadEvent = {
@@ -94,7 +98,7 @@ export const leadAutoReply = inngest.createFunction(
     const to = normalizePhone(phone);
     if (to && client.twilio_phone_number && checkA2pGate(client, to).allowed) {
       await step.run("sms-homeowner", async () =>
-        sms.send({ to, from: client.twilio_phone_number ?? undefined, body }),
+        sms.send({ to, from: resolveSmsFrom(client) ?? undefined, body }),
       );
     }
 
@@ -201,7 +205,7 @@ export const leadUnansweredFollowUp = inngest.createFunction(
     await step.run("sms-follow-up", async () =>
       getSmsProvider().send({
         to,
-        from: client.twilio_phone_number!,
+        from: resolveSmsFrom(client)!,
         body,
       }),
     );
@@ -357,7 +361,7 @@ export const missedCallTextBack = inngest.createFunction(
       await step.run("sms-missed", async () =>
         sms.send({
           to: toPhone,
-          from: client.twilio_phone_number!,
+          from: resolveSmsFrom(client)!,
           body,
         }),
       );
@@ -764,7 +768,7 @@ export const invoiceFollowUp = inngest.createFunction(
         if (a2p.allowed) {
           await getSmsProvider().send({
             to: phone,
-            from: client.twilio_phone_number,
+            from: resolveSmsFrom(client)!,
             body,
           });
         } else {
@@ -872,7 +876,7 @@ export const quoteFollowUp = inngest.createFunction(
           if (a2p.allowed) {
             await getSmsProvider().send({
               to: phone,
-              from: client.twilio_phone_number,
+              from: resolveSmsFrom(client)!,
               body,
             });
           } else {
@@ -983,7 +987,7 @@ export const rebookingNudge = inngest.createFunction(
     await step.run("sms-rebook", async () =>
       getSmsProvider().send({
         to: phone!,
-        from: client.twilio_phone_number!,
+        from: resolveSmsFrom(client)!,
         body,
       }),
     );
@@ -1108,6 +1112,39 @@ export const emailDomainVerificationPoll = inngest.createFunction(
               email_dns_records: result.records,
             })
             .eq("id", row.id);
+          checked++;
+        } catch {
+          // Soft-fail this client — tried again on the next run.
+        }
+      }
+      return { checked };
+    });
+  },
+);
+
+export const a2pPipelinePoll = inngest.createFunction(
+  { id: "a2p-pipeline-poll", triggers: [{ cron: "*/30 * * * *" }] },
+  async ({ step }: { step: Step }) => {
+    return step.run("poll-pending-a2p", async () => {
+      const supabase = createAdminClient();
+      const { data: pending } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("a2p_status", "pending")
+        .not("a2p_registration_type", "is", null);
+
+      let checked = 0;
+      for (const client of pending ?? []) {
+        const state = (client.a2p_pipeline as Partial<A2pPipelineState> | null) ?? null;
+        if (!state?.stage) continue;
+        try {
+          const ein = client.a2p_ein_encrypted ? decryptEin(client.a2p_ein_encrypted) : undefined;
+          const info = buildA2pBusinessInfo(client, ein);
+          const result = await advanceA2pPipeline(info, client.twilio_phone_sid, state as A2pPipelineState);
+          await supabase
+            .from("clients")
+            .update({ a2p_pipeline: result.state, a2p_status: result.a2pStatus })
+            .eq("id", client.id);
           checked++;
         } catch {
           // Soft-fail this client — tried again on the next run.
@@ -1258,4 +1295,5 @@ export const functions = [
   monthlyResultsEmail,
   healthMonitor,
   emailDomainVerificationPoll,
+  a2pPipelinePoll,
 ];

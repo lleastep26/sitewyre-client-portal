@@ -16,6 +16,9 @@ import { SettingsTabs } from "./settings-tabs";
 import { BusinessProfileTab } from "./business-profile-tab";
 import { PhoneTab } from "./phone-tab";
 import { EmailTab } from "./email-tab";
+import { A2pTab } from "./a2p-tab";
+import { maskEin } from "@/lib/a2p/encryption";
+import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
 import {
   ensureDefaultAvailability,
@@ -472,6 +475,19 @@ export default async function SettingsPage({
           fromName={client.email_from_name ?? ""}
           replyTo={client.email_reply_to ?? ""}
           businessName={client.business_name}
+        />
+      </Card>
+      <Card>
+        <CardTitle>Texting registration (A2P)</CardTitle>
+        <A2pTab
+          canEdit={canEditBusinessProfile}
+          website={client.website}
+          registrationType={client.a2p_registration_type}
+          einMasked={canEditBusinessProfile && client.a2p_ein_last4 ? maskEin(client.a2p_ein_last4) : null}
+          stage={((client.a2p_pipeline as A2pPipelineState | null)?.stage as string) ?? "not_started"}
+          error={(client.a2p_pipeline as A2pPipelineState | null)?.error ?? null}
+          a2pStatus={client.a2p_status}
+          businessPhone={client.phone}
         />
       </Card>
     </div>

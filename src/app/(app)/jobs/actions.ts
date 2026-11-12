@@ -20,6 +20,7 @@ import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
 import { hasRecentReviewRequest } from "@/lib/funnels/recent-review-request";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
 
 const DEFAULT_CHECKLIST = [
   { id: "1", label: "Arrive on site", done: false },
@@ -165,7 +166,7 @@ export async function updateJobStatus(input: {
             name: "portal/appointment.reminder",
             data: {
               to: phone,
-              from: client.twilio_phone_number,
+              from: resolveSmsFrom(client)!,
               body,
               clientId: client.id,
               trigger: "on_my_way",
@@ -176,7 +177,7 @@ export async function updateJobStatus(input: {
       } else if (a2p?.allowed) {
         await getSmsProvider().send({
           to: phone,
-          from: client.twilio_phone_number,
+          from: resolveSmsFrom(client)!,
           body,
         });
       }
@@ -250,7 +251,7 @@ export async function updateJobStatus(input: {
                 clientId: client.id,
                 contactId: contactId ?? undefined,
                 phone,
-                from: client.twilio_phone_number,
+                from: resolveSmsFrom(client)!,
                 reviewToken: reviewLink.token,
                 completedAt,
               },
