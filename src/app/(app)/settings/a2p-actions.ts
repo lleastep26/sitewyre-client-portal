@@ -10,7 +10,7 @@ import {
   clearRejectedStage,
   type A2pPipelineState,
 } from "@/lib/a2p/pipeline";
-import { resendBrandOtp } from "@/lib/a2p/trust-hub";
+import { resendBrandOtp, getSitewyrePrimaryBrandSid } from "@/lib/a2p/trust-hub";
 import { buildA2pBusinessInfo } from "@/lib/a2p/business-info";
 import type { ClientRow } from "@/lib/supabase/types";
 
@@ -25,16 +25,6 @@ function pipelineOf(client: ClientRow): A2pPipelineState {
   if (!raw || !raw.stage) return initialPipelineState();
   return raw as A2pPipelineState;
 }
-
-export type A2pStatusView = {
-  registrationType: "sole_prop" | "low_volume_standard" | null;
-  einMasked: string | null;
-  stage: A2pPipelineState["stage"] | "not_started";
-  error: string | null;
-  a2pStatus: string | null;
-  otpVerifiedAt: string | null;
-  brandType: string | null;
-};
 
 /** Live check only — never trusts the client's own report of this. */
 export async function checkA2pWebsite(): Promise<{ ok: boolean } | { error: string }> {
@@ -55,8 +45,15 @@ export async function startA2pRegistration(
   }
 
   const registrationType = String(formData.get("registrationType") ?? "");
-  if (registrationType !== "sole_prop" && registrationType !== "low_volume_standard") {
+  if (
+    registrationType !== "sole_prop" &&
+    registrationType !== "low_volume_standard" &&
+    registrationType !== "same_entity"
+  ) {
     return { error: "Choose a registration path" };
+  }
+  if (registrationType === "same_entity" && role !== "sitewyre_admin") {
+    return { error: "Only a Sitewyre admin can use the same-entity path." };
   }
 
   if (!client.website) {
@@ -91,7 +88,10 @@ export async function startA2pRegistration(
     { ...client, a2p_registration_type: registrationType } as ClientRow,
     ein,
   );
-  const state = initialPipelineState();
+  const state: A2pPipelineState =
+    registrationType === "same_entity"
+      ? { stage: "messaging_service", error: null, brandSid: await getSitewyrePrimaryBrandSid() }
+      : initialPipelineState();
   const result = await advanceA2pPipeline(info, client.twilio_phone_sid, {
     ...state,
     websiteCheckOk: true,

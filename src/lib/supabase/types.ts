@@ -22,7 +22,7 @@ export type ClientRow = {
   twilio_phone_number: string | null;
   twilio_phone_sid: string | null;
   a2p_status: string | null;
-  a2p_registration_type: "sole_prop" | "low_volume_standard" | null;
+  a2p_registration_type: "sole_prop" | "low_volume_standard" | "same_entity" | null;
   a2p_ein_encrypted: string | null;
   a2p_ein_last4: string | null;
   a2p_pipeline: import("@/lib/a2p/trust-hub").A2pPipelineState | Record<string, never>;

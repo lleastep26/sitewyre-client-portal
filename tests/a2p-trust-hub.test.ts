@@ -18,6 +18,7 @@ const servicesCreate = vi.fn();
 const phoneNumbersCreate = vi.fn();
 const usAppToPersonCreate = vi.fn();
 const usAppToPersonFetch = vi.fn();
+const brandRegistrationsList = vi.fn();
 
 vi.mock("twilio", () => ({
   default: () => ({
@@ -48,7 +49,7 @@ vi.mock("twilio", () => ({
       v1: {
         brandRegistrations: Object.assign(
           () => ({ fetch: brandRegistrationFetch, brandRegistrationOtps: { create: brandRegistrationOtpCreate } }),
-          { create: brandRegistrationsCreate },
+          { create: brandRegistrationsCreate, list: brandRegistrationsList },
         ),
         services: Object.assign(
           () => ({
@@ -72,6 +73,7 @@ import {
   pollBrandStatus,
   pollCampaignStatus,
   resendBrandOtp,
+  getSitewyrePrimaryBrandSid,
   type A2pBusinessInfo,
   type A2pPipelineState,
 } from "@/lib/a2p/trust-hub";
@@ -115,6 +117,9 @@ beforeEach(() => {
   servicesCreate.mockResolvedValue({ sid: "MGservice" });
   phoneNumbersCreate.mockResolvedValue({});
   usAppToPersonCreate.mockResolvedValue({ sid: "QEcampaign" });
+  brandRegistrationsList.mockResolvedValue([
+    { sid: "BNprimarybrand", customerProfileBundleSid: "BUprimary", status: "APPROVED" },
+  ]);
 });
 
 describe("ensureCustomerProfile", () => {
@@ -303,5 +308,32 @@ describe("ensureCampaign / pollCampaignStatus", () => {
     usAppToPersonFetch.mockResolvedValue({ campaignStatus: "FAILED", errors: [{ message: "Bad sample" }] });
     const result = await pollCampaignStatus("MGservice", "QEcampaign");
     expect(result).toEqual({ status: "FAILED", errorMessage: "Bad sample" });
+  });
+
+  it("uses MIXED for the same_entity path too", async () => {
+    const sameEntityInfo = { ...soleProInfo, registrationType: "same_entity" as const };
+    await ensureCampaign(sameEntityInfo, ["a", "b"], "flow", baseState);
+    expect(usAppToPersonCreate).toHaveBeenCalledWith(expect.objectContaining({ usAppToPersonUsecase: "MIXED" }));
+  });
+});
+
+describe("getSitewyrePrimaryBrandSid", () => {
+  it("resolves the approved brand tied to the primary customer profile", async () => {
+    const sid = await getSitewyrePrimaryBrandSid();
+    expect(sid).toBe("BNprimarybrand");
+  });
+
+  it("ignores a brand tied to some other (non-primary) profile", async () => {
+    brandRegistrationsList.mockResolvedValue([
+      { sid: "BNother", customerProfileBundleSid: "BUsomeoneelse", status: "APPROVED" },
+    ]);
+    await expect(getSitewyrePrimaryBrandSid()).rejects.toThrow("No approved Sitewyre brand found");
+  });
+
+  it("ignores a brand on the primary profile that isn't approved yet", async () => {
+    brandRegistrationsList.mockResolvedValue([
+      { sid: "BNpending", customerProfileBundleSid: "BUprimary", status: "PENDING" },
+    ]);
+    await expect(getSitewyrePrimaryBrandSid()).rejects.toThrow("No approved Sitewyre brand found");
   });
 });

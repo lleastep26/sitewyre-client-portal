@@ -4,7 +4,8 @@ import type { A2pBusinessInfo } from "./trust-hub";
 export function buildA2pBusinessInfo(client: ClientRow, ein?: string): A2pBusinessInfo {
   const registrationType = (client.a2p_registration_type ?? "sole_prop") as
     | "sole_prop"
-    | "low_volume_standard";
+    | "low_volume_standard"
+    | "same_entity";
   return {
     registrationType,
     legalBusinessName: client.legal_business_name || client.business_name || "",

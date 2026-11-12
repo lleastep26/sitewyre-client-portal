@@ -10,6 +10,7 @@ const decryptEin = vi.fn();
 const einLast4 = vi.fn();
 const advanceA2pPipeline = vi.fn();
 const resendBrandOtp = vi.fn();
+const getSitewyrePrimaryBrandSid = vi.fn();
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({
@@ -32,6 +33,7 @@ vi.mock("@/lib/a2p/pipeline", async () => {
 });
 vi.mock("@/lib/a2p/trust-hub", () => ({
   resendBrandOtp: (sid: string) => resendBrandOtp(sid),
+  getSitewyrePrimaryBrandSid: () => getSitewyrePrimaryBrandSid(),
 }));
 
 function makeClientsTable(onUpdate: (patch: unknown) => void) {
@@ -82,6 +84,7 @@ beforeEach(() => {
     state: { stage: "trust_bundle", error: null, customerProfileSid: "BU1" },
     a2pStatus: "pending",
   });
+  getSitewyrePrimaryBrandSid.mockResolvedValue("BNprimarybrand");
 });
 
 describe("startA2pRegistration", () => {
@@ -176,6 +179,36 @@ describe("startA2pRegistration", () => {
       a2p_pipeline: { stage: "trust_bundle", error: null, customerProfileSid: "BU1" },
       a2p_status: "pending",
     });
+  });
+
+  it("blocks the owner from using the same_entity path — admin only", async () => {
+    fakeRole = "owner";
+    fakeSupabase = { from: () => makeClientsTable(() => undefined) };
+    const { startA2pRegistration } = await import("@/app/(app)/settings/a2p-actions");
+    const result = await startA2pRegistration(
+      fd({ registrationType: "same_entity", confirmPrivacyPolicy: "on", confirmLeadFormConsent: "on" }),
+    );
+    expect(result).toEqual({ error: expect.stringContaining("Sitewyre admin") });
+    expect(getSitewyrePrimaryBrandSid).not.toHaveBeenCalled();
+  });
+
+  it("resolves Sitewyre's brand and seeds the pipeline at messaging_service for same_entity, with no EIN", async () => {
+    fakeRole = "sitewyre_admin";
+    const updates: Record<string, unknown>[] = [];
+    fakeSupabase = { from: () => makeClientsTable((p) => updates.push(p as Record<string, unknown>)) };
+    const { startA2pRegistration } = await import("@/app/(app)/settings/a2p-actions");
+    const result = await startA2pRegistration(
+      fd({ registrationType: "same_entity", confirmPrivacyPolicy: "on", confirmLeadFormConsent: "on" }),
+    );
+    expect(result).toEqual({ ok: true });
+    expect(getSitewyrePrimaryBrandSid).toHaveBeenCalled();
+    expect(advanceA2pPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({ registrationType: "same_entity" }),
+      "PN123",
+      expect.objectContaining({ stage: "messaging_service", brandSid: "BNprimarybrand" }),
+    );
+    expect(encryptEin).not.toHaveBeenCalled();
+    expect(updates[0]).not.toHaveProperty("a2p_ein_encrypted");
   });
 });
 

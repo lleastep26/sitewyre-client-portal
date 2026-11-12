@@ -44,7 +44,7 @@ export type A2pPipelineState = {
 };
 
 export type A2pBusinessInfo = {
-  registrationType: "sole_prop" | "low_volume_standard";
+  registrationType: "sole_prop" | "low_volume_standard" | "same_entity";
   legalBusinessName: string;
   businessEmail: string;
   phone: string;
@@ -71,6 +71,25 @@ async function getPrimaryCustomerProfileSid(client: ReturnType<typeof twilio>): 
   const primary = profiles.find((p) => p.status === "twilio-approved");
   if (!primary) throw new Error("Sitewyre's primary Trust Hub Customer Profile isn't approved");
   return primary.sid;
+}
+
+/**
+ * For a client that's the same legal entity as Sitewyre itself (e.g. a
+ * business the account owner also personally operates) — resolves
+ * Sitewyre's own already-approved brand, so that client's campaign
+ * registers under it instead of filing a new Brand with a duplicate
+ * EIN, which Twilio rejects (error 30703 — the business registration
+ * identifier is expected to be unique per brand).
+ */
+export async function getSitewyrePrimaryBrandSid(): Promise<string> {
+  const client = getTwilioClient();
+  const primaryProfileSid = await getPrimaryCustomerProfileSid(client);
+  const brands = await client.messaging.v1.brandRegistrations.list({ limit: 50 });
+  const match = brands.find(
+    (b) => b.customerProfileBundleSid === primaryProfileSid && b.status === "APPROVED",
+  );
+  if (!match) throw new Error("No approved Sitewyre brand found to register this campaign under");
+  return match.sid;
 }
 
 function extractErrorMessage(errors: Array<Record<string, unknown>> | undefined): string | null {

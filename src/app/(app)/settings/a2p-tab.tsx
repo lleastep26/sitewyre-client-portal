@@ -24,13 +24,15 @@ const STAGE_LABEL: Record<string, string> = {
   complete: "Waiting on campaign approval…",
 };
 
-const REGISTRATION_COST: Record<"sole_prop" | "low_volume_standard", string> = {
+const REGISTRATION_COST: Record<"sole_prop" | "low_volume_standard" | "same_entity", string> = {
   sole_prop: "$4.50 one-time brand fee + $15 one-time campaign fee, then $2/month",
   low_volume_standard: "$4.50 one-time brand fee + $15 one-time campaign fee, then $1.50/month",
+  same_entity: "$15 one-time campaign fee (no new brand fee), then $1.50/month",
 };
 
 export function A2pTab({
   canEdit,
+  isAdmin,
   website,
   registrationType,
   einMasked,
@@ -40,8 +42,9 @@ export function A2pTab({
   businessPhone,
 }: {
   canEdit: boolean;
+  isAdmin: boolean;
   website: string | null;
-  registrationType: "sole_prop" | "low_volume_standard" | null;
+  registrationType: "sole_prop" | "low_volume_standard" | "same_entity" | null;
   einMasked: string | null;
   stage: string;
   error: string | null;
@@ -51,7 +54,7 @@ export function A2pTab({
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [websiteOk, setWebsiteOk] = useState<boolean | null>(null);
-  const [path, setPath] = useState<"sole_prop" | "low_volume_standard">("sole_prop");
+  const [path, setPath] = useState<"sole_prop" | "low_volume_standard" | "same_entity">("sole_prop");
   const [ein, setEin] = useState("");
   const [confirmPrivacy, setConfirmPrivacy] = useState(false);
   const [confirmConsent, setConfirmConsent] = useState(false);
@@ -155,12 +158,30 @@ export function A2pTab({
             >
               No EIN
             </Button>
+            {isAdmin ? (
+              <Button
+                type="button"
+                variant={path === "same_entity" ? "default" : "secondary"}
+                size="sm"
+                onClick={() => setPath("same_entity")}
+              >
+                Same legal entity as Sitewyre
+              </Button>
+            ) : null}
           </div>
           {path === "sole_prop" ? (
             <p className="mt-2 text-xs text-charcoal/50">
               Sole Proprietor registration: limited to 1 phone number and lower message
               throughput. We&apos;ll text a verification code to {businessPhone || "your business phone"} —
               reply YES to confirm it&apos;s you.
+            </p>
+          ) : null}
+          {path === "same_entity" ? (
+            <p className="mt-2 text-xs text-charcoal/50">
+              Admin only. Skips a new Brand filing entirely and registers this client&apos;s
+              texting under Sitewyre&apos;s own already-approved brand — use only when this
+              business is the same legal entity/EIN as Sitewyre itself, to avoid a
+              duplicate-EIN rejection from Twilio.
             </p>
           ) : null}
         </div>

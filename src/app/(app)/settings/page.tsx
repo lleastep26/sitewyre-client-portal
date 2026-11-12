@@ -481,6 +481,7 @@ export default async function SettingsPage({
         <CardTitle>Texting registration (A2P)</CardTitle>
         <A2pTab
           canEdit={canEditBusinessProfile}
+          isAdmin={role === "sitewyre_admin"}
           website={client.website}
           registrationType={client.a2p_registration_type}
           einMasked={canEditBusinessProfile && client.a2p_ein_last4 ? maskEin(client.a2p_ein_last4) : null}

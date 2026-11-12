@@ -80,8 +80,10 @@ export async function advanceA2pPipeline(
         return { state: next, a2pStatus: "pending" };
       }
       case "campaign": {
-        if (info.registrationType === "low_volume_standard") {
-          // EIN path has no OTP gate — brand must still be APPROVED before campaign creation.
+        if (info.registrationType !== "sole_prop") {
+          // low_volume_standard and same_entity have no OTP gate — brand
+          // must still be APPROVED before campaign creation (same_entity's
+          // brand always already is, so this just confirms it quickly).
           if (!state.brandSid) throw new Error("Missing brand SID before campaign creation");
           const poll = await pollBrandStatus(state.brandSid);
           if (poll.status === "FAILED") {

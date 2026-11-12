@@ -105,6 +105,20 @@ describe("advanceA2pPipeline", () => {
     expect(result.a2pStatus).toBe("pending");
   });
 
+  it("creates the campaign straight away for same_entity once its (already-approved) brand confirms", async () => {
+    pollBrandStatus.mockResolvedValue({ status: "APPROVED", identityStatus: null, errorMessage: null });
+    ensureCampaign.mockResolvedValue({ stage: "complete", error: null, campaignSid: "QE1" });
+    const sameEntityInfo = { ...info, registrationType: "same_entity" as const };
+    const result = await advanceA2pPipeline(sameEntityInfo, "PN1", {
+      stage: "campaign",
+      error: null,
+      brandSid: "BNprimarybrand",
+      messagingServiceSid: "MG1",
+    });
+    expect(ensureCampaign).toHaveBeenCalled();
+    expect(result.state.stage).toBe("complete");
+  });
+
   it("reports approved once the campaign is verified", async () => {
     pollCampaignStatus.mockResolvedValue({ status: "VERIFIED", errorMessage: null });
     const result = await advanceA2pPipeline(info, null, {
