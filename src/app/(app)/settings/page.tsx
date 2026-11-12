@@ -452,46 +452,50 @@ export default async function SettingsPage({
     />
   );
 
-  const phoneEmailTab = (
-    <div className="space-y-4">
-      <Card>
-        <CardTitle>Phone</CardTitle>
-        <PhoneTab
-          canEdit={canEditBusinessProfile}
-          isAdmin={role === "sitewyre_admin"}
-          twilioPhoneNumber={client.twilio_phone_number}
-          forwardToPhone={client.forward_to_phone}
-          smsOutboundThisMonth={usage.smsOutbound}
-          smsMonthlyAllowance={client.sms_monthly_allowance}
-        />
-      </Card>
-      <Card>
-        <CardTitle>Email</CardTitle>
-        <EmailTab
-          canEdit={canEditBusinessProfile}
-          domain={client.email_domain}
-          domainStatus={client.email_domain_status}
-          dnsRecords={(client.email_dns_records as EmailDnsRecord[] | null) ?? []}
-          fromName={client.email_from_name ?? ""}
-          replyTo={client.email_reply_to ?? ""}
-          businessName={client.business_name}
-        />
-      </Card>
-      <Card>
-        <CardTitle>Texting registration (A2P)</CardTitle>
-        <A2pTab
-          canEdit={canEditBusinessProfile}
-          isAdmin={role === "sitewyre_admin"}
-          website={client.website}
-          registrationType={client.a2p_registration_type}
-          einMasked={canEditBusinessProfile && client.a2p_ein_last4 ? maskEin(client.a2p_ein_last4) : null}
-          stage={((client.a2p_pipeline as A2pPipelineState | null)?.stage as string) ?? "not_started"}
-          error={(client.a2p_pipeline as A2pPipelineState | null)?.error ?? null}
-          a2pStatus={client.a2p_status}
-          businessPhone={client.phone}
-        />
-      </Card>
-    </div>
+  const phoneTab = (
+    <Card>
+      <CardTitle>Phone</CardTitle>
+      <PhoneTab
+        canEdit={canEditBusinessProfile}
+        isAdmin={role === "sitewyre_admin"}
+        twilioPhoneNumber={client.twilio_phone_number}
+        forwardToPhone={client.forward_to_phone}
+        smsOutboundThisMonth={usage.smsOutbound}
+        smsMonthlyAllowance={client.sms_monthly_allowance}
+      />
+    </Card>
+  );
+
+  const a2pTab = (
+    <Card>
+      <CardTitle>Texting registration (A2P)</CardTitle>
+      <A2pTab
+        canEdit={canEditBusinessProfile}
+        isAdmin={role === "sitewyre_admin"}
+        website={client.website}
+        registrationType={client.a2p_registration_type}
+        einMasked={canEditBusinessProfile && client.a2p_ein_last4 ? maskEin(client.a2p_ein_last4) : null}
+        stage={((client.a2p_pipeline as A2pPipelineState | null)?.stage as string) ?? "not_started"}
+        error={(client.a2p_pipeline as A2pPipelineState | null)?.error ?? null}
+        a2pStatus={client.a2p_status}
+        businessPhone={client.phone}
+      />
+    </Card>
+  );
+
+  const emailTab = (
+    <Card>
+      <CardTitle>Email</CardTitle>
+      <EmailTab
+        canEdit={canEditBusinessProfile}
+        domain={client.email_domain}
+        domainStatus={client.email_domain_status}
+        dnsRecords={(client.email_dns_records as EmailDnsRecord[] | null) ?? []}
+        fromName={client.email_from_name ?? ""}
+        replyTo={client.email_reply_to ?? ""}
+        businessName={client.business_name}
+      />
+    </Card>
   );
 
   return (
@@ -505,7 +509,9 @@ export default async function SettingsPage({
         tabs={[
           { id: "general", label: "General", content: generalTab },
           { id: "profile", label: "Business Profile", content: businessProfileTab },
-          { id: "phone-email", label: "Phone & Email", content: phoneEmailTab },
+          { id: "phone", label: "Phone", content: phoneTab },
+          { id: "a2p", label: "Texting registration", content: a2pTab },
+          { id: "email", label: "Email", content: emailTab },
         ]}
       />
     </div>
