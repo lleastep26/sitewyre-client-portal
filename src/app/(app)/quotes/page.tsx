@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
-import { createQuote } from "./actions";
+import { createQuoteAction } from "./actions";
 import { QuoteActions } from "./quote-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ export default async function QuotesPage({
       </header>
 
       {params.new ? (
-        <form action={async (fd) => { await createQuote(fd); }} className="space-y-2 rounded-xl border bg-white p-4">
+        <form action={createQuoteAction} className="space-y-2 rounded-xl border bg-white p-4">
           <select
             name="contact_id"
             className="h-11 w-full rounded-md border border-charcoal/20 px-3"
