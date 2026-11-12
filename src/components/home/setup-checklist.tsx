@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { onlinePaymentsEnabled } from "@/lib/flags";
 
 const ITEMS = [
   { key: "verify_phone", label: "Verify phone number", href: "/settings" },
@@ -15,7 +16,10 @@ export function SetupChecklist({
 }: {
   checklist: Record<string, boolean> | null;
 }) {
-  const remaining = ITEMS.filter((i) => !checklist?.[i.key]);
+  const items = onlinePaymentsEnabled()
+    ? ITEMS
+    : ITEMS.filter((i) => i.key !== "connect_stripe");
+  const remaining = items.filter((i) => !checklist?.[i.key]);
   if (!remaining.length) return null;
 
   return (

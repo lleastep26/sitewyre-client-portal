@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { ConnectStripeButton } from "./connect-stripe-button";
 import { SettingsTabs } from "./settings-tabs";
+import { onlinePaymentsEnabled } from "@/lib/flags";
 import { BusinessProfileTab } from "./business-profile-tab";
 import { PhoneTab } from "./phone-tab";
 import { EmailTab } from "./email-tab";
@@ -376,20 +377,22 @@ export default async function SettingsPage({
         </ul>
       </Card>
 
-      <Card>
-        <CardTitle>Stripe payouts</CardTitle>
-        <CardDescription className="mt-1">
-          {client.stripe_connect_account_id
-            ? `Connected (${client.stripe_connect_account_id})`
-            : "Not connected"}
-          {params.stripe ? ` · ${params.stripe}` : ""}
-        </CardDescription>
-        <div className="mt-3">
-          <ConnectStripeButton
-            connected={Boolean(client.stripe_connect_account_id)}
-          />
-        </div>
-      </Card>
+      {onlinePaymentsEnabled() ? (
+        <Card>
+          <CardTitle>Stripe payouts</CardTitle>
+          <CardDescription className="mt-1">
+            {client.stripe_connect_account_id
+              ? `Connected (${client.stripe_connect_account_id})`
+              : "Not connected"}
+            {params.stripe ? ` · ${params.stripe}` : ""}
+          </CardDescription>
+          <div className="mt-3">
+            <ConnectStripeButton
+              connected={Boolean(client.stripe_connect_account_id)}
+            />
+          </div>
+        </Card>
+      ) : null}
 
       <Card>
         <CardTitle>Trade preset</CardTitle>

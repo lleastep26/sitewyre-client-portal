@@ -6,6 +6,7 @@ import {
 } from "@/lib/adapters/payments";
 import { getAppUrl } from "@/lib/supabase/env";
 import type { ClientRow, InvoiceRow } from "@/lib/supabase/types";
+import { onlinePaymentsEnabled } from "@/lib/flags";
 import { PaymentForm } from "./payment-form";
 
 export default async function PayPage({
@@ -51,7 +52,9 @@ export default async function PayPage({
   let payBlockedReason: string | null = null;
 
   if (!showPaid) {
-    if (!client?.stripe_connect_account_id) {
+    if (!onlinePaymentsEnabled()) {
+      payBlockedReason = `Online payment isn't available, please contact ${client?.business_name ?? "the business"}.`;
+    } else if (!client?.stripe_connect_account_id) {
       payBlockedReason =
         "Online card pay requires the contractor to finish Stripe Connect onboarding.";
     } else if (!process.env.STRIPE_SECRET_KEY) {

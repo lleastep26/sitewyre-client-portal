@@ -9,10 +9,12 @@ export function InvoiceActions({
   invoiceId,
   publicToken,
   remaining,
+  showPayLink,
 }: {
   invoiceId: string;
   publicToken: string;
   remaining: number;
+  showPayLink: boolean;
 }) {
   const [pending, start] = useTransition();
   return (
@@ -44,14 +46,16 @@ export function InvoiceActions({
       >
         Record cash
       </Button>
-      <Link
-        href={`/pay/${publicToken}`}
-        className="self-center text-xs text-copper underline-offset-2 hover:underline"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Open pay page
-      </Link>
+      {showPayLink ? (
+        <Link
+          href={`/pay/${publicToken}`}
+          className="self-center text-xs text-copper underline-offset-2 hover:underline"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open pay page
+        </Link>
+      ) : null}
     </div>
   );
 }

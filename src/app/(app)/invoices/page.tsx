@@ -4,6 +4,7 @@ import { createInvoiceAction } from "./actions";
 import { InvoiceActions } from "./invoice-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { onlinePaymentsEnabled } from "@/lib/flags";
 
 export default async function InvoicesPage({
   searchParams,
@@ -54,6 +55,7 @@ export default async function InvoicesPage({
                 invoiceId={inv.id}
                 publicToken={inv.public_token}
                 remaining={remaining}
+                showPayLink={onlinePaymentsEnabled()}
               />
             </li>
           );
