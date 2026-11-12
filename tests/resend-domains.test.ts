@@ -29,9 +29,18 @@ describe("buildDmarcRecord", () => {
     expect(record).toMatchObject({
       record: "DMARC",
       type: "TXT",
-      name: "_dmarc.example.com",
+      name: "_dmarc",
       status: "verified",
     });
+    expect(resolveTxt).toHaveBeenCalledWith("_dmarc.example.com");
+  });
+
+  it("names the record relative to the apex for a sending subdomain", async () => {
+    resolveTxt.mockResolvedValue([["v=DMARC1; p=none"]]);
+    const { buildDmarcRecord } = await import("@/lib/email/resend-domains");
+    const record = await buildDmarcRecord("mail.example.com");
+    expect(record.name).toBe("_dmarc.mail");
+    expect(resolveTxt).toHaveBeenCalledWith("_dmarc.mail.example.com");
   });
 
   it("reports pending when no matching TXT record is found", async () => {
