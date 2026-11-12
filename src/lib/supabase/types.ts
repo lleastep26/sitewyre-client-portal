@@ -10,6 +10,7 @@ export type ClientRow = {
   trade: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  billing_status: string | null;
   google_review_url: string | null;
   google_place_id: string | null;
   owner_name: string | null;

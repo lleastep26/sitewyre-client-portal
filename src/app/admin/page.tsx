@@ -4,6 +4,7 @@ import { switchAdminViewClient } from "./actions";
 import { CallRoutingForm } from "./call-routing-form";
 import { A2pStatusSelect } from "./a2p-status-select";
 import { NumberPurchase } from "./number-purchase";
+import { StripeLink } from "./stripe-link";
 
 export default async function AdminPage() {
   const { supabase } = await requireAdmin();
@@ -14,7 +15,7 @@ export default async function AdminPage() {
   const { data: clients, error } = await supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone",
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status",
     )
     .order("business_name", { ascending: true });
 
@@ -85,6 +86,11 @@ export default async function AdminPage() {
                 dialTimeoutSeconds={c.dial_timeout_seconds}
               />
               {!c.twilio_phone_number ? <NumberPurchase clientId={c.id} /> : null}
+              <StripeLink
+                clientId={c.id}
+                stripeCustomerId={c.stripe_customer_id}
+                billingStatus={c.billing_status}
+              />
             </li>
           );
         })}

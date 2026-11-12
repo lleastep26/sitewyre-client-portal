@@ -2,7 +2,9 @@ import { nanoid } from "nanoid";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applyTradePreset } from "@/lib/crm/apply-trade-preset";
 import { createAccountSchema } from "@/lib/validation/leads";
-import { getSmsProvider } from "@/lib/adapters";
+import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
+import { ensureClientAutomations } from "@/lib/automations";
+import { welcomeEmailHtml } from "@/lib/email/welcome";
 import { normalizeHost, normalizePhone } from "@/lib/utils";
 
 function unauthorized() {
@@ -127,6 +129,7 @@ export async function POST(request: Request) {
   );
 
   await applyTradePreset(supabase, client.id, input.trade);
+  await ensureClientAutomations(supabase, client.id);
 
   await supabase.from("audit_log").insert({
     actor_id: ownerUserId,
@@ -137,16 +140,19 @@ export async function POST(request: Request) {
     diff: { via: "n8n_internal_api" },
   });
 
-  // Magic link welcome (best-effort)
+  // Welcome email (best-effort)
   try {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    await supabase.auth.admin.generateLink({
-      type: "magiclink",
-      email: input.email,
-      options: { redirectTo: `${appUrl}/auth/callback` },
+    await getEmailProvider().send({
+      to: input.email,
+      subject: "Your Sitewyre portal is ready",
+      html: welcomeEmailHtml({
+        businessName: input.business_name,
+        loginUrl: `${appUrl}/login`,
+      }),
     });
   } catch (err) {
-    console.warn("Welcome magic link skipped", err);
+    console.warn("Welcome email skipped", err);
   }
 
   return Response.json({

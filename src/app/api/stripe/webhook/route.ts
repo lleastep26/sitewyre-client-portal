@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       .from("clients")
       .update({
         stripe_subscription_id: sub.id,
+        billing_status: sub.status,
         status: sub.status === "active" ? "active" : sub.status,
       })
       .eq("stripe_customer_id", String(sub.customer));

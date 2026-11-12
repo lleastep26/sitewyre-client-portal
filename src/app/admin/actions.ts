@@ -1,10 +1,14 @@
 "use server";
 
+import Stripe from "stripe";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ADMIN_VIEW_COOKIE, requireAdmin } from "@/lib/auth/session";
 import { normalizePhone } from "@/lib/utils";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getEmailProvider } from "@/lib/adapters";
+import { welcomeEmailHtml } from "@/lib/email/welcome";
 import {
   buyLocalNumberWithWebhooks,
   numberPurchaseBlockReason,
@@ -159,5 +163,123 @@ export async function setClientA2pStatus(formData: FormData) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function linkStripeCustomer(
+  formData: FormData,
+): Promise<{ ok: true; plan: string; status: string } | { error: string }> {
+  const { supabase, user } = await requireAdmin();
+  const clientId = String(formData.get("clientId") ?? "");
+  const customerId = String(formData.get("customerId") ?? "").trim();
+  if (!customerId.startsWith("cus_")) {
+    return { error: "Enter a valid Stripe customer ID (starts with cus_)" };
+  }
+
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return { error: "Stripe is not configured" };
+  const stripe = new Stripe(key);
+
+  let customer: Stripe.Customer | Stripe.DeletedCustomer;
+  try {
+    customer = await stripe.customers.retrieve(customerId);
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+  if (customer.deleted) return { error: "That Stripe customer was deleted" };
+
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "all",
+    limit: 1,
+    expand: ["data.items.data.price.product"],
+  });
+  const sub = subs.data[0];
+  if (!sub) return { error: "No subscription found for that customer" };
+
+  const price = sub.items.data[0]?.price;
+  const product = price?.product;
+  const plan =
+    (product && typeof product === "object" && "name" in product
+      ? product.name
+      : null) ??
+    price?.nickname ??
+    price?.id ??
+    "Unknown plan";
+
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      stripe_customer_id: customerId,
+      stripe_subscription_id: sub.id,
+      billing_status: sub.status,
+    })
+    .eq("id", clientId);
+  if (error) return { error: error.message };
+
+  await supabase.from("audit_log").insert({
+    actor_id: user.id,
+    action: "admin_linked_stripe_customer",
+    entity: "client",
+    entity_id: clientId,
+    client_id: clientId,
+    diff: { customerId, subscriptionId: sub.id, status: sub.status },
+  });
+
+  revalidatePath("/admin");
+  return { ok: true, plan, status: sub.status };
+}
+
+export async function resendWelcomeEmail(
+  formData: FormData,
+): Promise<{ ok: true } | { error: string }> {
+  const { supabase, user } = await requireAdmin();
+  const clientId = String(formData.get("clientId") ?? "");
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, business_name")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (!client) return { error: "Client not found" };
+
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("user_id")
+    .eq("client_id", clientId)
+    .eq("role", "owner")
+    .maybeSingle();
+  if (!membership) return { error: "No owner found for this client" };
+
+  const admin = createAdminClient();
+  const { data: ownerUser, error: userErr } = await admin.auth.admin.getUserById(
+    membership.user_id,
+  );
+  if (userErr || !ownerUser.user?.email) {
+    return { error: "Owner has no email on file" };
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  try {
+    await getEmailProvider().send({
+      to: ownerUser.user.email,
+      subject: "Your Sitewyre portal is ready",
+      html: welcomeEmailHtml({
+        businessName: client.business_name,
+        loginUrl: `${appUrl}/login`,
+      }),
+    });
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+
+  await supabase.from("audit_log").insert({
+    actor_id: user.id,
+    action: "admin_resent_welcome_email",
+    entity: "client",
+    entity_id: clientId,
+    client_id: clientId,
+  });
+
   return { ok: true };
 }
