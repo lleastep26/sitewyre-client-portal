@@ -41,6 +41,7 @@ export type ClientRow = {
   email_domain: string | null;
   email_domain_resend_id: string | null;
   email_domain_status: string | null;
+  email_domain_verified_at: string | null;
   email_dns_records: unknown;
   email_from_name: string | null;
   email_reply_to: string | null;

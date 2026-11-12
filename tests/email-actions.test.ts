@@ -91,6 +91,7 @@ describe("createClientEmailDomain", () => {
       email_domain_resend_id: "dom_1",
       email_domain_status: "pending",
     });
+    expect(updates[0]).toMatchObject({ email_domain_verified_at: null });
   });
 });
 
@@ -112,6 +113,32 @@ describe("verifyClientEmailDomain", () => {
     const result = await verifyClientEmailDomain();
     expect(result).toMatchObject({ ok: true, status: "verified" });
     expect(updates[0]).toMatchObject({ email_domain_status: "verified" });
+  });
+
+  it("stamps email_domain_verified_at and returns it when the domain is verified", async () => {
+    fakeClient.email_domain = "mail.example.com";
+    fakeClient.email_domain_resend_id = "dom_1";
+    refreshEmailDomain.mockResolvedValue({ status: "verified", records: [] });
+    const updates: unknown[] = [];
+    fakeSupabase = { from: () => makeClientsTable((p) => updates.push(p)) };
+    const { verifyClientEmailDomain } = await import("@/app/(app)/settings/email-actions");
+    const result = await verifyClientEmailDomain();
+    expect(result).toMatchObject({ ok: true });
+    if (!("ok" in result)) throw new Error("expected ok result");
+    expect(result.verifiedAt).toEqual(expect.any(String));
+    expect(updates[0]).toMatchObject({ email_domain_verified_at: result.verifiedAt });
+  });
+
+  it("clears email_domain_verified_at when a re-check finds the domain failed", async () => {
+    fakeClient.email_domain = "mail.example.com";
+    fakeClient.email_domain_resend_id = "dom_1";
+    refreshEmailDomain.mockResolvedValue({ status: "failed", records: [] });
+    const updates: unknown[] = [];
+    fakeSupabase = { from: () => makeClientsTable((p) => updates.push(p)) };
+    const { verifyClientEmailDomain } = await import("@/app/(app)/settings/email-actions");
+    const result = await verifyClientEmailDomain();
+    expect(result).toMatchObject({ ok: true, status: "failed", verifiedAt: null });
+    expect(updates[0]).toMatchObject({ email_domain_verified_at: null });
   });
 });
 

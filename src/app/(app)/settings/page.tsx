@@ -490,6 +490,7 @@ export default async function SettingsPage({
         canEdit={canEditBusinessProfile}
         domain={client.email_domain}
         domainStatus={client.email_domain_status}
+        domainVerifiedAt={client.email_domain_verified_at}
         dnsRecords={(client.email_dns_records as EmailDnsRecord[] | null) ?? []}
         fromName={client.email_from_name ?? ""}
         replyTo={client.email_reply_to ?? ""}

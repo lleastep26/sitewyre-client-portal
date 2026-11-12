@@ -51,6 +51,18 @@ function statusLabel(status: string | undefined): { text: string; className: str
   }
 }
 
+function isFailedStatus(status: string | null | undefined): boolean {
+  return status === "failed" || status === "temporary_failure";
+}
+
+function formatVerifiedDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -73,6 +85,7 @@ export function EmailTab({
   canEdit,
   domain,
   domainStatus,
+  domainVerifiedAt,
   dnsRecords,
   fromName,
   replyTo,
@@ -81,6 +94,7 @@ export function EmailTab({
   canEdit: boolean;
   domain: string | null;
   domainStatus: string | null;
+  domainVerifiedAt: string | null;
   dnsRecords: DnsRecord[];
   fromName: string;
   replyTo: string;
@@ -89,6 +103,7 @@ export function EmailTab({
   const [domainInput, setDomainInput] = useState("");
   const [records, setRecords] = useState(dnsRecords);
   const [status, setStatus] = useState(domainStatus);
+  const [verifiedAt, setVerifiedAt] = useState(domainVerifiedAt);
   const [fromNameInput, setFromNameInput] = useState(fromName);
   const [replyToInput, setReplyToInput] = useState(replyTo);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(
@@ -115,6 +130,7 @@ export function EmailTab({
       else {
         setStatus(result.status);
         setRecords(result.records);
+        setVerifiedAt(result.verifiedAt);
         setMessage({ kind: "ok", text: "Rechecked with Resend." });
       }
     });
@@ -175,49 +191,75 @@ export function EmailTab({
           <>
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="text-sm text-charcoal">{domain}</span>
-              <span className={`text-sm font-medium ${overall.className}`}>
-                {overall.text}
-              </span>
+              {status === "verified" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-copper/10 px-3 py-1 text-xs font-medium text-copper">
+                  ✓ Verified{verifiedAt ? ` ${formatVerifiedDate(verifiedAt)}` : ""}
+                </span>
+              ) : (
+                <span className={`text-sm font-medium ${overall.className}`}>
+                  {overall.text}
+                </span>
+              )}
             </div>
 
             <div className="mt-3 space-y-2">
-              {records.map((r) => (
-                <div
-                  key={`${r.record}-${r.name}`}
-                  className="rounded-lg border border-charcoal/10 bg-white p-3 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-charcoal">{r.record}</span>
-                    <span className={statusLabel(r.status).className}>
-                      {statusLabel(r.status).text}
-                    </span>
+              {records.map((r) => {
+                const recordFailed = isFailedStatus(r.status);
+                return (
+                  <div
+                    key={`${r.record}-${r.name}`}
+                    className={`rounded-lg border p-3 text-xs ${
+                      recordFailed ? "border-red-300 bg-red-50" : "border-charcoal/10 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-charcoal">{r.record}</span>
+                      <span className={statusLabel(r.status).className}>
+                        {statusLabel(r.status).text}
+                      </span>
+                    </div>
+                    <div className="mt-1 grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5">
+                      <span className="text-charcoal/50">Type</span>
+                      <span className="truncate">{r.type}</span>
+                      <span />
+                      <span className="text-charcoal/50">Name</span>
+                      <span className="truncate">{r.name}</span>
+                      <CopyButton value={r.name} />
+                      <span className="text-charcoal/50">Value</span>
+                      <span className="truncate">{r.value}</span>
+                      <CopyButton value={r.value} />
+                    </div>
                   </div>
-                  <div className="mt-1 grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5">
-                    <span className="text-charcoal/50">Type</span>
-                    <span className="truncate">{r.type}</span>
-                    <span />
-                    <span className="text-charcoal/50">Name</span>
-                    <span className="truncate">{r.name}</span>
-                    <CopyButton value={r.name} />
-                    <span className="text-charcoal/50">Value</span>
-                    <span className="truncate">{r.value}</span>
-                    <CopyButton value={r.value} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {canEdit ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="mt-3"
-                disabled={pending}
-                onClick={verify}
-              >
-                {pending ? "Checking…" : "Verify"}
-              </Button>
+              status === "verified" ? (
+                <button
+                  type="button"
+                  className="mt-3 text-xs text-copper underline disabled:opacity-50"
+                  disabled={pending}
+                  onClick={verify}
+                >
+                  {pending ? "Checking…" : "Re-check"}
+                </button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="mt-3"
+                  disabled={pending}
+                  onClick={verify}
+                >
+                  {pending
+                    ? "Checking…"
+                    : isFailedStatus(status)
+                      ? "Check again"
+                      : "Verify"}
+                </Button>
+              )
             ) : null}
 
             <details className="mt-3 text-xs text-charcoal/60">

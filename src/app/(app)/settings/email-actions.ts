@@ -40,6 +40,7 @@ export async function createClientEmailDomain(
       email_domain_resend_id: created.id,
       email_domain_status: created.status,
       email_dns_records: created.records,
+      email_domain_verified_at: created.status === "verified" ? new Date().toISOString() : null,
     })
     .eq("id", client.id);
   if (error) return { error: error.message };
@@ -49,7 +50,12 @@ export async function createClientEmailDomain(
 }
 
 export async function verifyClientEmailDomain(): Promise<
-  | { ok: true; status: string; records: Awaited<ReturnType<typeof refreshEmailDomain>>["records"] }
+  | {
+      ok: true;
+      status: string;
+      records: Awaited<ReturnType<typeof refreshEmailDomain>>["records"];
+      verifiedAt: string | null;
+    }
   | { error: string }
 > {
   const { supabase, client, role } = await requireMembership();
@@ -68,14 +74,19 @@ export async function verifyClientEmailDomain(): Promise<
     return { error: (err as Error).message };
   }
 
+  const verifiedAt = refreshed.status === "verified" ? new Date().toISOString() : null;
   const { error } = await supabase
     .from("clients")
-    .update({ email_domain_status: refreshed.status, email_dns_records: refreshed.records })
+    .update({
+      email_domain_status: refreshed.status,
+      email_dns_records: refreshed.records,
+      email_domain_verified_at: verifiedAt,
+    })
     .eq("id", client.id);
   if (error) return { error: error.message };
 
   revalidatePath("/settings");
-  return { ok: true, status: refreshed.status, records: refreshed.records };
+  return { ok: true, status: refreshed.status, records: refreshed.records, verifiedAt };
 }
 
 export async function updateEmailSenderSettings(

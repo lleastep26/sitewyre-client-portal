@@ -1110,6 +1110,7 @@ export const emailDomainVerificationPoll = inngest.createFunction(
             .update({
               email_domain_status: result.status,
               email_dns_records: result.records,
+              email_domain_verified_at: result.status === "verified" ? new Date().toISOString() : null,
             })
             .eq("id", row.id);
           checked++;
