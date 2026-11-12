@@ -14,6 +14,9 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { ConnectStripeButton } from "./connect-stripe-button";
 import { SettingsTabs } from "./settings-tabs";
 import { BusinessProfileTab } from "./business-profile-tab";
+import { PhoneTab } from "./phone-tab";
+import { EmailTab } from "./email-tab";
+import type { EmailDnsRecord } from "@/lib/email/resend-domains";
 import {
   ensureDefaultAvailability,
   weekdayLabel,
@@ -446,6 +449,34 @@ export default async function SettingsPage({
     />
   );
 
+  const phoneEmailTab = (
+    <div className="space-y-4">
+      <Card>
+        <CardTitle>Phone</CardTitle>
+        <PhoneTab
+          canEdit={canEditBusinessProfile}
+          isAdmin={role === "sitewyre_admin"}
+          twilioPhoneNumber={client.twilio_phone_number}
+          forwardToPhone={client.forward_to_phone}
+          smsOutboundThisMonth={usage.smsOutbound}
+          smsMonthlyAllowance={client.sms_monthly_allowance}
+        />
+      </Card>
+      <Card>
+        <CardTitle>Email</CardTitle>
+        <EmailTab
+          canEdit={canEditBusinessProfile}
+          domain={client.email_domain}
+          domainStatus={client.email_domain_status}
+          dnsRecords={(client.email_dns_records as EmailDnsRecord[] | null) ?? []}
+          fromName={client.email_from_name ?? ""}
+          replyTo={client.email_reply_to ?? ""}
+          businessName={client.business_name}
+        />
+      </Card>
+    </div>
+  );
+
   return (
     <div className="space-y-4 px-4 pb-10">
       <header>
@@ -453,7 +484,13 @@ export default async function SettingsPage({
         <h1 className="mt-1 font-display text-3xl">Account</h1>
       </header>
 
-      <SettingsTabs general={generalTab} businessProfile={businessProfileTab} />
+      <SettingsTabs
+        tabs={[
+          { id: "general", label: "General", content: generalTab },
+          { id: "profile", label: "Business Profile", content: businessProfileTab },
+          { id: "phone-email", label: "Phone & Email", content: phoneEmailTab },
+        ]}
+      />
     </div>
   );
 }

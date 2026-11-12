@@ -33,6 +33,13 @@ export type ClientRow = {
   postal_code: string | null;
   country: string;
   logo_url: string | null;
+  sms_monthly_allowance: number;
+  email_domain: string | null;
+  email_domain_resend_id: string | null;
+  email_domain_status: string | null;
+  email_dns_records: unknown;
+  email_from_name: string | null;
+  email_reply_to: string | null;
   stripe_connect_account_id: string | null;
   setup_checklist: Record<string, boolean> | null;
   created_at: string;

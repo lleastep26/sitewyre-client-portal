@@ -4,9 +4,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ADMIN_VIEW_COOKIE, requireAdmin } from "@/lib/auth/session";
-import { getSmsProvider } from "@/lib/adapters";
-import { getAppUrl } from "@/lib/supabase/env";
 import { normalizePhone } from "@/lib/utils";
+import {
+  buyLocalNumberWithWebhooks,
+  numberPurchaseBlockReason,
+  previewLocalNumber,
+} from "@/lib/phone/provision";
 
 const A2P_STATUSES = ["pending", "approved", "failed"] as const;
 
@@ -52,42 +55,32 @@ export async function clearAdminViewClient() {
 async function getClientForNumberPurchase(
   supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"],
   clientId: string,
-) {
+): Promise<
+  | { error: string }
+  | { client: { id: string; twilio_phone_number: string | null; forward_to_phone: string | null } }
+> {
   const { data: client } = await supabase
     .from("clients")
     .select("id, twilio_phone_number, forward_to_phone")
     .eq("id", clientId)
     .maybeSingle();
-  if (!client) return { error: "Client not found" } as const;
-  if (client.twilio_phone_number) {
-    return { error: "This client already has a Twilio number assigned." } as const;
-  }
-  if (!client.forward_to_phone) {
-    return {
-      error: "Set a forward-to phone number for this client before buying a number.",
-    } as const;
-  }
-  return { client } as const;
+  if (!client) return { error: "Client not found" };
+  const blockReason = numberPurchaseBlockReason(client);
+  if (blockReason) return { error: blockReason };
+  return { client };
 }
 
-export async function previewClientNumber(formData: FormData) {
+export async function previewClientNumber(
+  formData: FormData,
+): Promise<{ phoneNumber: string; monthlyPrice: string } | { error: string }> {
   const { supabase } = await requireAdmin();
   const clientId = String(formData.get("clientId") ?? "");
   const areaCode = String(formData.get("areaCode") ?? "").trim();
-  if (!/^\d{3}$/.test(areaCode)) return { error: "Enter a 3-digit area code" };
 
   const guard = await getClientForNumberPurchase(supabase, clientId);
   if ("error" in guard) return { error: guard.error };
 
-  const provider = getSmsProvider();
-  const [phoneNumber, monthlyPrice] = await Promise.all([
-    provider.searchLocalNumber(areaCode),
-    provider.getLocalNumberMonthlyPrice(),
-  ]);
-  if (!phoneNumber) {
-    return { error: `No numbers available for area code ${areaCode}` };
-  }
-  return { phoneNumber, monthlyPrice };
+  return previewLocalNumber(areaCode);
 }
 
 export async function buyClientNumber(formData: FormData) {
@@ -101,15 +94,7 @@ export async function buyClientNumber(formData: FormData) {
   const guard = await getClientForNumberPurchase(supabase, clientId);
   if ("error" in guard) return { error: guard.error };
 
-  const provider = getSmsProvider();
-  const purchased = await provider.buyNumber(phoneNumber);
-
-  // Only the number just purchased here gets its webhooks set — this never
-  // touches any client's pre-existing Twilio number.
-  await provider.assignNumberWebhooks(purchased.sid, {
-    smsUrl: `${getAppUrl()}/api/twilio/webhook`,
-    voiceUrl: `${getAppUrl()}/api/twilio/voice`,
-  });
+  const purchased = await buyLocalNumberWithWebhooks(phoneNumber);
 
   const { error } = await supabase
     .from("clients")

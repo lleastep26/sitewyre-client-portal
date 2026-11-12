@@ -22,10 +22,8 @@ export function NumberPurchase({ clientId }: { clientId: string }) {
       fd.set("clientId", clientId);
       fd.set("areaCode", areaCode);
       const result = await previewClientNumber(fd);
-      if (result.error) setError(result.error);
-      else if (result.phoneNumber && result.monthlyPrice) {
-        setPreview({ phoneNumber: result.phoneNumber, monthlyPrice: result.monthlyPrice });
-      }
+      if ("error" in result) setError(result.error);
+      else setPreview({ phoneNumber: result.phoneNumber, monthlyPrice: result.monthlyPrice });
     });
   }
 

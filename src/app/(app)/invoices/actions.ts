@@ -7,6 +7,7 @@ import { getPaymentsProvider, getEmailProvider, getSmsProvider } from "@/lib/ada
 import { getAppUrl } from "@/lib/supabase/env";
 import { inngest } from "@/lib/inngest/client";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { resolveEmailFromAddress } from "@/lib/email/from-address";
 
 export async function createInvoice(formData: FormData) {
   const { supabase, client } = await requireMembership();
@@ -91,6 +92,7 @@ export async function sendInvoice(invoiceId: string) {
       to: contact.emails[0],
       subject: `Invoice ${invoice.number}`,
       html: `<p>Pay online: <a href="${link}">${link}</a></p>`,
+      ...resolveEmailFromAddress(client),
     });
   }
   if (

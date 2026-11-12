@@ -22,6 +22,8 @@ import { shouldStopReviewDrip } from "@/lib/funnels/review-request-gate";
 import { shouldStopReviewBlast } from "@/lib/funnels/review-blast-gate";
 import { buildReviewBlastReminderMessage } from "@/lib/funnels/review-blast-message";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { resolveEmailFromAddress } from "@/lib/email/from-address";
+import { refreshEmailDomain } from "@/lib/email/resend-domains";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -104,6 +106,7 @@ export const leadAutoReply = inngest.createFunction(
           subject: `We got your request — ${client.business_name ?? "Sitewyre"}`,
           html: `<p>${body}</p>`,
           text: body,
+          ...resolveEmailFromAddress(client),
         }),
       );
     }
@@ -752,6 +755,7 @@ export const invoiceFollowUp = inngest.createFunction(
           subject,
           html: `<p>${body}</p><p><a href="${link}">${link}</a></p>`,
           text: body,
+          ...resolveEmailFromAddress(client),
         });
       }
       let a2pReason: string | undefined;
@@ -882,6 +886,7 @@ export const quoteFollowUp = inngest.createFunction(
           subject: `Reminder: quote ${quote.number}`,
           html: `<p>${body}</p>`,
           text: body,
+          ...resolveEmailFromAddress(client),
         });
       }
 
@@ -1081,6 +1086,38 @@ export const healthMonitor = inngest.createFunction(
   },
 );
 
+export const emailDomainVerificationPoll = inngest.createFunction(
+  { id: "email-domain-verification-poll", triggers: [{ cron: "*/30 * * * *" }] },
+  async ({ step }: { step: Step }) => {
+    return step.run("poll-pending-domains", async () => {
+      const supabase = createAdminClient();
+      const { data: pending } = await supabase
+        .from("clients")
+        .select("id, email_domain, email_domain_resend_id")
+        .eq("email_domain_status", "pending");
+
+      let checked = 0;
+      for (const row of pending ?? []) {
+        if (!row.email_domain_resend_id || !row.email_domain) continue;
+        try {
+          const result = await refreshEmailDomain(row.email_domain_resend_id, row.email_domain);
+          await supabase
+            .from("clients")
+            .update({
+              email_domain_status: result.status,
+              email_dns_records: result.records,
+            })
+            .eq("id", row.id);
+          checked++;
+        } catch {
+          // Soft-fail this client — tried again on the next run.
+        }
+      }
+      return { checked };
+    });
+  },
+);
+
 type ReviewBlastContactEvent = {
   name: "portal/review_blast.contact_started";
   data: {
@@ -1220,4 +1257,5 @@ export const functions = [
   rebookingNudge,
   monthlyResultsEmail,
   healthMonitor,
+  emailDomainVerificationPoll,
 ];

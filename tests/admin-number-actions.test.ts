@@ -89,7 +89,7 @@ describe("previewClientNumber", () => {
     fakeSupabase = buildSupabase({});
     const { previewClientNumber } = await import("@/app/admin/actions");
     const result = await previewClientNumber(fd({ clientId: "client1", areaCode: "5" }));
-    expect(result.error).toMatch(/area code/i);
+    expect("error" in result && result.error).toMatch(/area code/i);
     expect(searchLocalNumber).not.toHaveBeenCalled();
   });
 
@@ -98,7 +98,7 @@ describe("previewClientNumber", () => {
     fakeSupabase = buildSupabase({});
     const { previewClientNumber } = await import("@/app/admin/actions");
     const result = await previewClientNumber(fd({ clientId: "client1", areaCode: "512" }));
-    expect(result.error).toMatch(/already has/i);
+    expect("error" in result && result.error).toMatch(/already has/i);
     expect(searchLocalNumber).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ describe("previewClientNumber", () => {
     fakeSupabase = buildSupabase({});
     const { previewClientNumber } = await import("@/app/admin/actions");
     const result = await previewClientNumber(fd({ clientId: "client1", areaCode: "512" }));
-    expect(result.error).toMatch(/forward-to phone/i);
+    expect("error" in result && result.error).toMatch(/forward-to phone/i);
     expect(searchLocalNumber).not.toHaveBeenCalled();
   });
 
@@ -126,7 +126,7 @@ describe("previewClientNumber", () => {
     fakeSupabase = buildSupabase({});
     const { previewClientNumber } = await import("@/app/admin/actions");
     const result = await previewClientNumber(fd({ clientId: "client1", areaCode: "512" }));
-    expect(result.error).toMatch(/no numbers available/i);
+    expect("error" in result && result.error).toMatch(/no numbers available/i);
   });
 });
 

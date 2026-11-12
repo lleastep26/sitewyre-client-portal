@@ -7,6 +7,7 @@ import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import { getAppUrl } from "@/lib/supabase/env";
 import { inngest } from "@/lib/inngest/client";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { resolveEmailFromAddress } from "@/lib/email/from-address";
 
 export async function createQuote(formData: FormData) {
   const { supabase, client } = await requireMembership();
@@ -86,6 +87,7 @@ export async function sendQuote(quoteId: string) {
       to: contact.emails[0],
       subject: `Quote ${quote.number} from ${client.business_name}`,
       html: `<p>View and approve your quote:</p><p><a href="${link}">${link}</a></p>`,
+      ...resolveEmailFromAddress(client),
     });
   }
 
