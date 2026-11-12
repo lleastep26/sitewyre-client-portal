@@ -16,7 +16,7 @@ const actions = [
 export function QuickAdd() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="fixed bottom-20 right-4 z-50">
+    <div className="fixed bottom-4 right-4 z-50">
       {open ? (
         <div className="mb-2 w-44 overflow-hidden rounded-xl border border-charcoal/10 bg-white shadow-lg">
           {actions.map((a) => (

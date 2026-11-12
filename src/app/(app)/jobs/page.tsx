@@ -5,15 +5,17 @@ import { JobStatusButtons } from "./job-actions-form";
 import { JobPhotos } from "@/app/crew/job-photos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; open?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, client } = await requireMembership();
   if (!client) return null;
+  const openId = params.open;
 
   const { data: jobs } = await supabase
     .from("jobs")
@@ -64,7 +66,13 @@ export default async function JobsPage({
         {(jobs ?? []).map((job) => (
           <li
             key={job.id}
-            className="rounded-lg border border-charcoal/10 bg-white p-3"
+            id={`job-${job.id}`}
+            className={cn(
+              "rounded-lg border bg-white p-3",
+              job.id === openId
+                ? "border-copper ring-2 ring-copper"
+                : "border-charcoal/10",
+            )}
           >
             <p className="font-medium">{job.address ?? "No address"}</p>
             <p className="text-xs text-charcoal/60">

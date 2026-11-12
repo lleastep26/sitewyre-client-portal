@@ -1,4 +1,5 @@
-import { BottomNav } from "@/components/shell/bottom-nav";
+import { cookies } from "next/headers";
+import { AppShell } from "@/components/shell/app-shell";
 import { QuickAdd } from "@/components/shell/quick-add";
 import { SupportButton } from "@/components/shell/support-button";
 import { PwaRegister } from "@/components/shell/pwa-register";
@@ -10,20 +11,26 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { client, role } = await requireMembership();
+  const { client, role, user, isAdmin } = await requireMembership();
+  const cookieStore = await cookies();
+  const initialCollapsed = cookieStore.get("sidebar_collapsed")?.value === "1";
 
   return (
-    <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#fbf7f2,_#f0e8dc_50%,_#e8dccb)] text-charcoal">
-      <div className="mx-auto min-h-dvh w-full max-w-lg pb-24 pt-4">
+    <div className="text-charcoal">
+      <AppShell
+        businessName={client?.business_name ?? null}
+        email={user.email ?? null}
+        isAdmin={isAdmin}
+        initialCollapsed={initialCollapsed}
+      >
         {role === "sitewyre_admin" ? (
           <AdminBanner businessName={client?.business_name ?? null} />
         ) : null}
         {children}
-      </div>
+      </AppShell>
       <PwaRegister />
       <SupportButton />
       <QuickAdd />
-      <BottomNav />
     </div>
   );
 }

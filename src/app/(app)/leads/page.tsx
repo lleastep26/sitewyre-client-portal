@@ -3,15 +3,17 @@ import { LeadsBoard } from "@/components/leads/board";
 import { createLead } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string; view?: string }>;
+  searchParams: Promise<{ new?: string; view?: string; open?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, client } = await requireMembership();
   if (!client) return null;
+  const openId = params.open;
 
   const [{ data: stages }, { data: leads }] = await Promise.all([
     supabase
@@ -48,10 +50,19 @@ export default async function LeadsPage({
         </form>
       ) : null}
 
-      {params.view === "list" ? (
+      {params.view === "list" || openId ? (
         <ul className="space-y-2 px-4">
           {(leads ?? []).map((lead) => (
-            <li key={lead.id} className="rounded-lg border border-charcoal/10 bg-white p-3">
+            <li
+              key={lead.id}
+              id={`lead-${lead.id}`}
+              className={cn(
+                "rounded-lg border bg-white p-3",
+                lead.id === openId
+                  ? "border-copper ring-2 ring-copper"
+                  : "border-charcoal/10",
+              )}
+            >
               <p className="font-medium">{lead.name}</p>
               <p className="text-xs text-charcoal/60">
                 {lead.phone} · {lead.source ?? "manual"}
