@@ -164,3 +164,37 @@ describe("website script: form capture", () => {
     expect(page.leads()[0].site_key).toBe("xyz");
   });
 });
+
+describe("website script: embeds", () => {
+  it("turns placeholders into the booking calendar and lead form frames", async () => {
+    const page = await load(
+      `<div id="b" data-sitewyre="booking"></div><div id="l" data-sitewyre="lead-form"></div><div data-sitewyre="unknown"></div>`,
+      { config: { enabled: false, capture: false, site_key: "abc" } },
+    );
+    const frames = page.window.document.querySelectorAll("iframe");
+    expect(frames).toHaveLength(2);
+    expect(page.window.document.querySelector("#b iframe")?.getAttribute("src")).toBe(`${PORTAL}/embed/book/abc`);
+    expect(page.window.document.querySelector("#l iframe")?.getAttribute("src")).toBe(`${PORTAL}/embed/lead/abc`);
+    expect(page.window.document.querySelector("#b iframe")?.getAttribute("title")).toBe("Book online");
+  });
+
+  it("sizes a Sitewyre frame to the height it reports, and ignores messages from anywhere else", async () => {
+    const page = await load(`<div data-sitewyre="booking"></div>`, {
+      config: { enabled: false, capture: false, site_key: "abc" },
+    });
+    const frame = page.window.document.querySelector("iframe") as HTMLIFrameElement;
+    const post = (origin: string, data: unknown) =>
+      page.window.dispatchEvent(
+        new page.window.MessageEvent("message", { origin, data, source: frame.contentWindow }),
+      );
+
+    post("https://evil.example", { type: "sitewyre:height", height: 900 });
+    expect(frame.style.height).toBe("760px");
+    post(PORTAL, { type: "something-else", height: 900 });
+    expect(frame.style.height).toBe("760px");
+    post(PORTAL, { type: "sitewyre:height", height: 912.4 });
+    expect(frame.style.height).toBe("912px");
+    post(PORTAL, { type: "sitewyre:height", height: 999999 });
+    expect(frame.style.height).toBe("4000px");
+  });
+});

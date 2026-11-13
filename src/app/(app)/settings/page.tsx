@@ -19,7 +19,12 @@ import { PhoneTab } from "./phone-tab";
 import { CallForwardingCard } from "./call-forwarding-card";
 import { WebsiteTab, type EmbedSnippet, type WebsiteStatusView } from "./website-tab";
 import { websiteStatus } from "@/lib/website/status";
-import { INSTALL_GUIDES, gtmSnippet, websiteSnippet } from "@/lib/website/install-guides";
+import {
+  INSTALL_GUIDES,
+  embedSnippets,
+  gtmSnippet,
+  websiteSnippet,
+} from "@/lib/website/install-guides";
 import { smsConsentText, smsPrivacySection } from "@/lib/a2p/consent-text";
 import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
@@ -549,7 +554,7 @@ export default async function SettingsPage({
     siteStatus.state === "connected" || siteStatus.state === "other_site"
       ? { state: siteStatus.state, host: siteStatus.host, seenLabel: dateLabel(siteStatus.seenAt) }
       : siteStatus;
-  const embedSnippets: EmbedSnippet[] = [];
+  const embeds: EmbedSnippet[] = client.site_key ? embedSnippets(getAppUrl(), client.site_key) : [];
   const websiteTab = (
     <Card>
       <CardTitle>Your website</CardTitle>
@@ -572,7 +577,7 @@ export default async function SettingsPage({
           consentText={smsConsentText(client.business_name)}
           privacyText={smsPrivacySection(client.business_name)}
           guides={INSTALL_GUIDES}
-          embeds={embedSnippets}
+          embeds={embeds}
         />
       </div>
     </Card>

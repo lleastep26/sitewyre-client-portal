@@ -6,6 +6,7 @@ export function isPublicPath(pathname: string): boolean {
   return (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/book/") ||
+    pathname.startsWith("/embed/") ||
     pathname.startsWith("/q/") ||
     pathname.startsWith("/pay/") ||
     pathname.startsWith("/r/") ||

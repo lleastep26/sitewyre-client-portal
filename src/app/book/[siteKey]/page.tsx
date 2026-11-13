@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { BookingWizard } from "./booking-wizard";
+import { smsConsentText } from "@/lib/a2p/consent-text";
 
 export default async function BookingPage({
   params,
@@ -69,6 +70,7 @@ export default async function BookingPage({
         siteKey={siteKey}
         businessName={client.business_name ?? "us"}
         services={services ?? []}
+        consentText={smsConsentText(client.business_name)}
       />
     </main>
   );

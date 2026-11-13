@@ -119,3 +119,27 @@ export const INSTALL_GUIDES: InstallGuide[] = [
     notes: ["Use this only if Tag Manager is already on your website."],
   },
 ];
+
+/** Frames a client can paste into any page. They work on their own; with
+ * the script installed as well, each frame is sized to fit its content. */
+export function embedSnippets(
+  appUrl: string,
+  siteKey: string,
+): { id: string; title: string; description: string; code: string }[] {
+  const frame = (path: string, title: string, height: number) =>
+    `<iframe src="${appUrl}${path}${siteKey}" title="${title}" style="width:100%;max-width:560px;height:${height}px;border:0" loading="lazy"></iframe>`;
+  return [
+    {
+      id: "booking",
+      title: "Booking calendar",
+      description: "Customers pick a service, a day and an open time from your real availability.",
+      code: frame("/embed/book/", "Book online", 760),
+    },
+    {
+      id: "lead-form",
+      title: "Lead form",
+      description: "Name, phone, email and message. It already shows the text message consent wording, so these leads can be texted.",
+      code: frame("/embed/lead/", "Contact form", 620),
+    },
+  ];
+}

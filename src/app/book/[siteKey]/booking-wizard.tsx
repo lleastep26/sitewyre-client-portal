@@ -17,10 +17,16 @@ export function BookingWizard({
   siteKey,
   businessName,
   services,
+  consentText,
+  embed = false,
 }: {
   siteKey: string;
   businessName: string;
   services: Service[];
+  /** SMS consent wording shown under the booking button. */
+  consentText: string;
+  /** Shown inside a frame on the business's own website. */
+  embed?: boolean;
 }) {
   const [step, setStep] = useState<"service" | "day" | "slot" | "confirm">(
     "service",
@@ -195,12 +201,14 @@ export function BookingWizard({
           </p>
           <input type="hidden" name="service_id" value={serviceId} />
           <input type="hidden" name="start_at" value={slot} />
+          {embed ? <input type="hidden" name="embed" value="1" /> : null}
           <Input name="name" placeholder="Your name" required />
           <Input name="phone" placeholder="Phone" required />
           <Input name="email" type="email" placeholder="Email" />
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "Booking…" : "Confirm booking"}
           </Button>
+          <p className="text-[11px] leading-snug text-charcoal/55">{consentText}</p>
         </form>
       ) : null}
 

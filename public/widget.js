@@ -16,6 +16,9 @@
  *    stops, delays or changes the form, and skips any form with a password
  *    or payment field, and login, sign-up, checkout and search forms.
  *    Add data-sitewyre-ignore to a form to leave it alone.
+ *  - Embeds: <div data-sitewyre="booking"></div> becomes the booking
+ *    calendar and <div data-sitewyre="lead-form"></div> the lead form.
+ *    Sitewyre frames pasted in by hand are sized to fit their content.
  *
  * Plain JavaScript, no dependencies. The chat is drawn inside a shadow
  * root so the host site's styles can't affect it and its styles can't leak
@@ -575,6 +578,46 @@
     );
   }
 
+  /* ---------------------------------------------------------------
+   * Embeds: booking calendar and lead form
+   * ------------------------------------------------------------- */
+
+  var EMBEDS = {
+    booking: { path: "/embed/book/", title: "Book online", height: 760 },
+    "lead-form": { path: "/embed/lead/", title: "Contact form", height: 620 },
+  };
+
+  function mountEmbeds() {
+    var slots = document.querySelectorAll("[data-sitewyre]");
+    for (var i = 0; i < slots.length; i++) {
+      var slot = slots[i];
+      var embed = EMBEDS[slot.getAttribute("data-sitewyre")];
+      if (!embed || slot.getAttribute("data-sitewyre-ready")) continue;
+      slot.setAttribute("data-sitewyre-ready", "1");
+      var frame = document.createElement("iframe");
+      frame.src = apiBase + embed.path + encodeURIComponent(siteKey);
+      frame.title = embed.title;
+      frame.loading = "lazy";
+      frame.style.cssText = "width:100%;border:0;display:block;height:" + embed.height + "px";
+      slot.appendChild(frame);
+    }
+  }
+
+  /* A Sitewyre frame reports how tall its content is; fit the frame to it
+   * so there's no scrollbar inside the page. Only messages from the portal
+   * are listened to, and only a height is ever read from them. */
+  window.addEventListener("message", function (event) {
+    if (event.origin !== apiBase) return;
+    var data = event.data;
+    if (!data || data.type !== "sitewyre:height" || typeof data.height !== "number") return;
+    var frames = document.querySelectorAll("iframe");
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === event.source) {
+        frames[i].style.height = Math.min(Math.max(Math.round(data.height), 200), 4000) + "px";
+      }
+    }
+  });
+
   var lookup = siteKey
     ? "site_key=" + encodeURIComponent(siteKey)
     : "domain=" + encodeURIComponent(window.location.hostname);
@@ -586,9 +629,15 @@
       if (!config) return;
       if (config.site_key) siteKey = config.site_key;
       if (config.capture && siteKey) startCapture();
+      var whenReady = function (run) {
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
+        else run();
+      };
+      if (siteKey) whenReady(mountEmbeds);
       if (!config.enabled) return;
-      if (document.body) mount(config);
-      else document.addEventListener("DOMContentLoaded", function () { mount(config); });
+      whenReady(function () {
+        mount(config);
+      });
     })
     .catch(function () {
       /* The script never breaks the host page. */

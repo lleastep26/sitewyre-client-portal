@@ -9,6 +9,8 @@ describe("isPublicPath", () => {
   it("still treats the existing public prefixes as public", () => {
     expect(isPublicPath("/api/leads")).toBe(true);
     expect(isPublicPath("/book/some-site")).toBe(true);
+    expect(isPublicPath("/embed/book/some-site")).toBe(true);
+    expect(isPublicPath("/embed/lead/some-site")).toBe(true);
     expect(isPublicPath("/q/token123")).toBe(true);
     expect(isPublicPath("/pay/token123")).toBe(true);
     expect(isPublicPath("/manifest.webmanifest")).toBe(true);

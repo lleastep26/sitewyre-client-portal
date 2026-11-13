@@ -145,5 +145,7 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     url: "/calendar",
   }).catch(() => undefined);
 
-  redirect(`/book/${siteKey}?booked=1`);
+  // A booking made inside the frame on the business's own website stays
+  // in the frame.
+  redirect(`${formData.get("embed") === "1" ? "/embed/book" : "/book"}/${siteKey}?booked=1`);
 }
