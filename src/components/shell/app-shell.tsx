@@ -18,6 +18,7 @@ export function AppShell({
   logoUrl,
   email,
   isAdmin,
+  jobsLabel,
   initialCollapsed,
   children,
 }: {
@@ -25,6 +26,7 @@ export function AppShell({
   logoUrl: string | null;
   email: string | null;
   isAdmin: boolean;
+  jobsLabel?: string;
   initialCollapsed: boolean;
   children: React.ReactNode;
 }) {
@@ -53,7 +55,7 @@ export function AppShell({
           </span>
         </div>
         <div className="min-h-0 flex-1">
-          <SidebarNav collapsed={collapsed} isAdmin={isAdmin} />
+          <SidebarNav collapsed={collapsed} isAdmin={isAdmin} jobsLabel={jobsLabel} />
         </div>
         <button
           type="button"
@@ -87,6 +89,7 @@ export function AppShell({
               <SidebarNav
                 collapsed={false}
                 isAdmin={isAdmin}
+                jobsLabel={jobsLabel}
                 onNavigate={() => setMobileOpen(false)}
               />
             </div>

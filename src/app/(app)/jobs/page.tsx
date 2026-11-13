@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
-import { createJob } from "./actions";
+import { createJobAction } from "./actions";
 import { JobStatusButtons } from "./job-actions-form";
 import { JobPhotos } from "@/app/crew/job-photos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getTradePreset } from "@/lib/trade-presets";
 import { cn } from "@/lib/utils";
 
 export default async function JobsPage({
@@ -16,6 +17,9 @@ export default async function JobsPage({
   const { supabase, client } = await requireMembership();
   if (!client) return null;
   const openId = params.open;
+  const labels = getTradePreset(client.trade ?? "other").labels;
+  const jobNoun = labels.jobNounSingular.toLowerCase();
+  const jobNounPlural = labels.jobNounPlural.toLowerCase();
 
   const { data: jobs } = await supabase
     .from("jobs")
@@ -26,7 +30,9 @@ export default async function JobsPage({
   return (
     <div className="space-y-4 px-4">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-copper">Jobs</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-copper">
+          {labels.jobNounPlural}
+        </p>
         <h1 className="mt-1 font-display text-3xl">Work orders</h1>
         <Link href="/crew" className="mt-1 inline-block text-sm text-copper">
           Open crew mode →
@@ -34,13 +40,8 @@ export default async function JobsPage({
       </header>
 
       {params.new ? (
-        <form
-          action={async (fd) => {
-            await createJob(fd);
-          }}
-          className="space-y-2 rounded-xl border bg-white p-4"
-        >
-          <Input name="address" placeholder="Job address" />
+        <form action={createJobAction} className="space-y-2 rounded-xl border bg-white p-4">
+          <Input name="address" placeholder={`${labels.jobNounSingular} address`} />
           <Input name="scheduled_start" type="datetime-local" />
           <Input name="notes" placeholder="Notes (optional)" />
           <label className="block text-xs text-charcoal/70">
@@ -57,7 +58,7 @@ export default async function JobsPage({
             </select>
           </label>
           <Button type="submit" className="w-full">
-            Create job
+            Create {jobNoun}
           </Button>
         </form>
       ) : null}
@@ -100,9 +101,9 @@ export default async function JobsPage({
         ))}
         {!jobs?.length ? (
           <div className="rounded-xl border border-dashed p-6 text-center">
-            <p className="font-display text-xl">No jobs yet</p>
+            <p className="font-display text-xl">No {jobNounPlural} yet</p>
             <a href="/jobs?new=1" className="mt-3 inline-block text-sm text-copper">
-              Create a job →
+              Create a {jobNoun} →
             </a>
           </div>
         ) : null}

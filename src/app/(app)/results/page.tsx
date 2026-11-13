@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
 import { getFunnelResults } from "@/lib/funnels/results";
+import { getTradePreset } from "@/lib/trade-presets";
 import { Card, CardTitle } from "@/components/ui/card";
 
 export default async function ResultsPage() {
   const { supabase, client } = await requireMembership();
   if (!client) return null;
+  const customerNoun = getTradePreset(client.trade ?? "other").labels.customerNoun;
 
   const results = await getFunnelResults(supabase, client.id, 30);
 
@@ -58,7 +60,7 @@ export default async function ResultsPage() {
       </Card>
 
       <Card>
-        <CardTitle>Past-customer review blast</CardTitle>
+        <CardTitle>Past-{customerNoun} review blast</CardTitle>
         <div className="mt-2 grid grid-cols-2 gap-3">
           <div>
             <p className="text-2xl font-display">

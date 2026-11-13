@@ -3,10 +3,10 @@ export type SelectOption = { value: string; label: string };
 /**
  * Values match the existing trade-preset keys where one already exists
  * (roofing, plumbing, hvac, electrical, cleaning, landscaping, painting,
- * general_contractor, other); pest_control/pool_service/remodeling have no
- * bespoke preset yet and fall back to the generic "other" templates via
- * getTradePreset()'s own fallback — same safe behavior, just no tailored
- * copy yet.
+ * general_contractor, med_spa, veterinary, other); pest_control/
+ * pool_service/remodeling have no bespoke preset yet and fall back to the
+ * generic "other" templates via getTradePreset()'s own fallback — same
+ * safe behavior, just no tailored copy yet.
  */
 export const NICHE_OPTIONS: SelectOption[] = [
   { value: "roofing", label: "Roofing" },
@@ -20,6 +20,8 @@ export const NICHE_OPTIONS: SelectOption[] = [
   { value: "pool_service", label: "Pool Service" },
   { value: "remodeling", label: "Remodeling" },
   { value: "general_contractor", label: "General Contractor" },
+  { value: "med_spa", label: "Med Spa" },
+  { value: "veterinary", label: "Veterinary" },
   { value: "other", label: "Other" },
 ];
 

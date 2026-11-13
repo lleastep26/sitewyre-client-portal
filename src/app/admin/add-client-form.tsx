@@ -3,19 +3,8 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NICHE_OPTIONS } from "@/lib/business-profile/options";
 import { addClient } from "./actions";
-
-const NICHES = [
-  "roofing",
-  "hvac",
-  "plumbing",
-  "cleaning",
-  "landscaping",
-  "electrical",
-  "painting",
-  "general_contractor",
-  "other",
-] as const;
 
 export function AddClientForm() {
   const [open, setOpen] = useState(false);
@@ -23,7 +12,7 @@ export function AddClientForm() {
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [niche, setNiche] = useState<(typeof NICHES)[number]>("cleaning");
+  const [niche, setNiche] = useState(NICHE_OPTIONS[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -77,12 +66,12 @@ export function AddClientForm() {
         />
         <select
           value={niche}
-          onChange={(e) => setNiche(e.target.value as (typeof NICHES)[number])}
+          onChange={(e) => setNiche(e.target.value)}
           className="h-11 w-full rounded-md border border-charcoal/20 px-3 text-sm"
         >
-          {NICHES.map((n) => (
-            <option key={n} value={n}>
-              {n.replace("_", " ")}
+          {NICHE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>

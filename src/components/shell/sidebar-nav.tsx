@@ -48,10 +48,12 @@ function NavLink({
 export function SidebarNav({
   collapsed,
   isAdmin,
+  jobsLabel,
   onNavigate,
 }: {
   collapsed: boolean;
   isAdmin: boolean;
+  jobsLabel?: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -70,7 +72,11 @@ export function SidebarNav({
               {group.items.map((item) => (
                 <NavLink
                   key={item.href}
-                  item={item}
+                  item={
+                    item.href === "/jobs" && jobsLabel
+                      ? { ...item, label: jobsLabel }
+                      : item
+                  }
                   active={isActive(pathname, item.href)}
                   collapsed={collapsed}
                   onNavigate={onNavigate}

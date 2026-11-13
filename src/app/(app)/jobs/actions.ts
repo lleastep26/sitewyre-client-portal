@@ -52,6 +52,10 @@ async function contactForJob(
   };
 }
 
+export async function createJobAction(formData: FormData): Promise<void> {
+  await createJob(formData);
+}
+
 export async function createJob(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
   if (!client) return { error: "No client" };

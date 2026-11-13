@@ -2,6 +2,7 @@
 
 import { requireMembership } from "@/lib/auth/session";
 import { ALL_PAGE_NAV_ITEMS } from "@/components/shell/nav-config";
+import { getTradePreset } from "@/lib/trade-presets";
 
 export type PortalSearchResult = {
   pages: { href: string; label: string }[];
@@ -25,12 +26,16 @@ export async function searchPortal(query: string): Promise<PortalSearchResult> {
   const { supabase, client, isAdmin } = await requireMembership();
   if (!client) return EMPTY;
 
+  const jobsLabel = getTradePreset(client.trade ?? "other").labels.jobNounPlural;
   const lower = q.toLowerCase();
   const pages = ALL_PAGE_NAV_ITEMS.filter((item) => {
     if (item.href === "/admin" && !isAdmin) return false;
     const haystack = [item.label, ...(item.keywords ?? [])].join(" ").toLowerCase();
     return haystack.includes(lower);
-  }).map((item) => ({ href: item.href, label: item.label }));
+  }).map((item) => ({
+    href: item.href,
+    label: item.href === "/jobs" ? jobsLabel : item.label,
+  }));
 
   const likeQ = `%${q}%`;
   const digits = q.replace(/\D/g, "");

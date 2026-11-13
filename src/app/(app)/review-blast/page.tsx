@@ -1,10 +1,12 @@
 import { requireMembership } from "@/lib/auth/session";
 import { resolveGoogleReviewUrl } from "@/lib/funnels/review-link";
+import { getTradePreset } from "@/lib/trade-presets";
 import { ReviewBlastWizard } from "./review-blast-wizard";
 
 export default async function ReviewBlastPage() {
   const { client } = await requireMembership();
   if (!client) return null;
+  const customerNoun = getTradePreset(client.trade ?? "other").labels.customerNoun;
 
   const blockers: string[] = [];
   if (!client.twilio_phone_number) {
@@ -28,7 +30,7 @@ export default async function ReviewBlastPage() {
           Review blast
         </p>
         <h1 className="mt-1 font-display text-2xl">
-          Past-customer review request
+          Past-{customerNoun} review request
         </h1>
       </header>
 
@@ -42,7 +44,7 @@ export default async function ReviewBlastPage() {
           </ul>
         </div>
       ) : (
-        <ReviewBlastWizard />
+        <ReviewBlastWizard customerNoun={customerNoun} />
       )}
     </div>
   );

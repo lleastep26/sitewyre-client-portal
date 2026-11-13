@@ -28,7 +28,7 @@ const REASON_LABEL: Record<string, string> = {
   recent_review_request: "asked within the last 90 days",
 };
 
-export function ReviewBlastWizard() {
+export function ReviewBlastWizard({ customerNoun = "customer" }: { customerNoun?: string }) {
   const [pending, start] = useTransition();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [consented, setConsented] = useState(false);
@@ -72,7 +72,7 @@ export function ReviewBlastWizard() {
       >
         <div>
           <label className="text-sm font-medium" htmlFor="csv">
-            Past-customer CSV
+            Past-{customerNoun} CSV
           </label>
           <input
             id="csv"

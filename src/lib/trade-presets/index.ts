@@ -1,5 +1,12 @@
+export type NicheLabels = {
+  jobNounSingular: string;
+  jobNounPlural: string;
+  customerNoun: string;
+};
+
 export type TradePreset = {
   trade: string;
+  labels: NicheLabels;
   stages: { name: string; position: number; is_won?: boolean; is_lost?: boolean }[];
   services: { name: string; duration_minutes: number; default_price: number }[];
   templates: { key: string; body: string }[];
@@ -14,9 +21,16 @@ const defaultStages = [
   { name: "Lost", position: 5, is_lost: true },
 ];
 
+const contractorLabels: NicheLabels = {
+  jobNounSingular: "Job",
+  jobNounPlural: "Jobs",
+  customerNoun: "customer",
+};
+
 export const TRADE_PRESETS: Record<string, TradePreset> = {
   roofing: {
     trade: "roofing",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Roof inspection", duration_minutes: 60, default_price: 0 },
@@ -32,6 +46,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   hvac: {
     trade: "hvac",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Service call", duration_minutes: 90, default_price: 129 },
@@ -47,6 +62,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   plumbing: {
     trade: "plumbing",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Service call", duration_minutes: 90, default_price: 125 },
@@ -62,6 +78,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   cleaning: {
     trade: "cleaning",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Standard clean", duration_minutes: 120, default_price: 150 },
@@ -77,6 +94,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   landscaping: {
     trade: "landscaping",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Lawn care visit", duration_minutes: 60, default_price: 55 },
@@ -91,6 +109,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   electrical: {
     trade: "electrical",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Service call", duration_minutes: 90, default_price: 150 },
@@ -105,6 +124,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   painting: {
     trade: "painting",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Interior estimate", duration_minutes: 60, default_price: 0 },
@@ -119,6 +139,7 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
   },
   general_contractor: {
     trade: "general_contractor",
+    labels: contractorLabels,
     stages: defaultStages,
     services: [
       { name: "Project consult", duration_minutes: 60, default_price: 0 },
@@ -131,10 +152,54 @@ export const TRADE_PRESETS: Record<string, TradePreset> = {
       },
     ],
   },
+  med_spa: {
+    trade: "med_spa",
+    labels: {
+      jobNounSingular: "Appointment",
+      jobNounPlural: "Appointments",
+      customerNoun: "client",
+    },
+    stages: defaultStages,
+    services: [
+      { name: "Consultation", duration_minutes: 30, default_price: 0 },
+      { name: "Treatment", duration_minutes: 60, default_price: 150 },
+    ],
+    templates: [
+      {
+        key: "lead_auto_reply",
+        body: "Hi {{first_name}}, thanks for reaching out to {{business_name}}. We'll confirm your appointment shortly.",
+      },
+    ],
+  },
+  veterinary: {
+    trade: "veterinary",
+    labels: {
+      jobNounSingular: "Appointment",
+      jobNounPlural: "Appointments",
+      customerNoun: "pet owner",
+    },
+    stages: defaultStages,
+    services: [
+      { name: "Checkup", duration_minutes: 30, default_price: 65 },
+      { name: "Sick visit", duration_minutes: 30, default_price: 85 },
+    ],
+    templates: [
+      {
+        key: "lead_auto_reply",
+        body: "Hi {{first_name}}, thanks for contacting {{business_name}}. We'll confirm your pet's appointment shortly.",
+      },
+    ],
+  },
+  // Generic fallback for anything that isn't a specific trade/niche above.
   other: {
     trade: "other",
+    labels: contractorLabels,
     stages: defaultStages,
-    services: [{ name: "Service visit", duration_minutes: 60, default_price: 0 }],
+    services: [
+      { name: "Estimate walkthrough", duration_minutes: 60, default_price: 0 },
+      { name: "Repair or service visit", duration_minutes: 60, default_price: 0 },
+      { name: "Quick consult", duration_minutes: 30, default_price: 0 },
+    ],
     templates: [
       {
         key: "lead_auto_reply",

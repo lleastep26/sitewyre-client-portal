@@ -3,6 +3,7 @@ import { requireMembership } from "@/lib/auth/session";
 import { SetupChecklist } from "@/components/home/setup-checklist";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getTradePreset } from "@/lib/trade-presets";
 import {
   SPEED_TO_LEAD_SLA_MINUTES,
   formatWaitingLabel,
@@ -12,6 +13,7 @@ import {
 
 export default async function HomePage() {
   const { supabase, client, role } = await requireMembership();
+  const labels = getTradePreset(client?.trade ?? "other").labels;
   if (!client) {
     return (
       <div className="px-4">
@@ -124,7 +126,11 @@ export default async function HomePage() {
           value={String(needsReply?.length ?? 0)}
           href="/inbox"
         />
-        <Stat label="Jobs today" value={String(jobsToday?.length ?? 0)} href="/jobs" />
+        <Stat
+          label={`${labels.jobNounPlural} today`}
+          value={String(jobsToday?.length ?? 0)}
+          href="/jobs"
+        />
         <Stat
           label="Unpaid invoices"
           value={String(unpaid?.length ?? 0)}
