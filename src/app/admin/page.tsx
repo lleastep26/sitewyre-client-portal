@@ -17,7 +17,7 @@ export default async function AdminPage() {
   let query = supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status",
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance",
     )
     .order("business_name", { ascending: true });
   if (agencyId) query = query.eq("agency_id", agencyId);
@@ -95,6 +95,21 @@ export default async function AdminPage() {
                 forwardPhone={c.forward_to_phone}
                 dialTimeoutSeconds={c.dial_timeout_seconds}
               />
+              {c.ai_receptionist_enabled ? (
+                <p
+                  className={
+                    c.retell_minutes_used_this_month > c.retell_minutes_allowance
+                      ? "mt-1 text-xs text-red-600"
+                      : "mt-1 text-xs text-charcoal/50"
+                  }
+                >
+                  AI receptionist: {c.retell_minutes_used_this_month.toFixed(1)} /{" "}
+                  {c.retell_minutes_allowance.toFixed(0)} min this month
+                  {c.retell_minutes_used_this_month > c.retell_minutes_allowance
+                    ? " — over allowance, bill manually"
+                    : ""}
+                </p>
+              ) : null}
               {isSitewyreAdmin ? (
                 <>
                   {!c.twilio_phone_number ? <NumberPurchase clientId={c.id} /> : null}

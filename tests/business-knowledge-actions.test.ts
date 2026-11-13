@@ -5,10 +5,13 @@ let fakeClient: { id: string };
 let fakeRole: string;
 let fakeFaqCount: number;
 
+const pushBusinessKnowledgeToRetell = vi.fn();
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({
   requireMembership: async () => ({ supabase: fakeSupabase, client: fakeClient, role: fakeRole }),
 }));
+vi.mock("@/lib/retell/agent-sync", () => ({ pushBusinessKnowledgeToRetell }));
 
 function makeClientsTable(onUpdate: (patch: unknown) => void) {
   const chain = {
@@ -114,6 +117,15 @@ describe("updateBusinessKnowledge", () => {
       after_hours_rules: null,
       ai_never_say: null,
     });
+  });
+
+  it("best-effort pushes the refreshed knowledge to Retell after saving", async () => {
+    fakeSupabase = { from: () => makeClientsTable(() => undefined) };
+    const { updateBusinessKnowledge } = await import(
+      "@/app/(app)/settings/business-knowledge-actions"
+    );
+    await updateBusinessKnowledge(fd({ services_offered: "Roof repair" }));
+    expect(pushBusinessKnowledgeToRetell).toHaveBeenCalledWith(fakeSupabase, "client1");
   });
 });
 

@@ -57,3 +57,18 @@ export interface AiProvider {
   suggestReply(context: string): Promise<string>;
   summarize(text: string): Promise<string>;
 }
+
+export interface VoiceProvider {
+  /** Places a new outbound call that runs the given TwiML. `statusCallback`
+   * (if given) is posted call-status events, notably "in-progress" once
+   * answered — used to detect a warm-transfer pickup without guessing. */
+  createOutboundCall(opts: {
+    to: string;
+    from: string;
+    twiml: string;
+    statusCallback?: string;
+  }): Promise<{ sid: string }>;
+  /** Redirects an in-progress call to new TwiML — the standard Twilio
+   * mechanism for a warm transfer (move a live call into a conference). */
+  redirectCall(callSid: string, twiml: string): Promise<void>;
+}

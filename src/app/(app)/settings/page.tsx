@@ -20,6 +20,7 @@ import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
 import { BusinessKnowledgeTab } from "./business-knowledge-tab";
 import { CalendarsTab } from "./calendars-tab";
+import { AiReceptionistTab } from "./ai-receptionist-tab";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
@@ -548,6 +549,22 @@ export default async function SettingsPage({
     </Card>
   );
 
+  const aiReceptionistTab = (
+    <Card>
+      <CardTitle>AI receptionist</CardTitle>
+      <div className="mt-3">
+        <AiReceptionistTab
+          canEdit={canEditBusinessProfile}
+          isAdmin={role === "sitewyre_admin"}
+          enabled={client.ai_receptionist_enabled}
+          bookingEnabled={client.ai_receptionist_booking_enabled}
+          minutesUsedThisMonth={client.retell_minutes_used_this_month}
+          minutesAllowance={client.retell_minutes_allowance}
+        />
+      </div>
+    </Card>
+  );
+
   const calendarsTab = (
     <Card>
       <CardTitle>Calendars</CardTitle>
@@ -581,6 +598,7 @@ export default async function SettingsPage({
           { id: "email", label: "Email", content: emailTab },
           { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },
           { id: "calendars", label: "Calendars", content: calendarsTab },
+          { id: "ai-receptionist", label: "AI receptionist", content: aiReceptionistTab },
         ]}
       />
     </div>

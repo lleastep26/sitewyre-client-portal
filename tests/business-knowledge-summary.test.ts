@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildBusinessKnowledgeSummary } from "@/lib/business-knowledge/summary";
+import {
+  buildBusinessKnowledgeSummary,
+  buildRetellBeginMessage,
+  buildRetellGeneralPrompt,
+} from "@/lib/business-knowledge/summary";
 
 describe("buildBusinessKnowledgeSummary", () => {
   it("includes every section when fully filled in", () => {
@@ -75,5 +79,42 @@ describe("buildBusinessKnowledgeSummary", () => {
     const fridayIndex = summary.indexOf("Friday");
     expect(mondayIndex).toBeGreaterThan(-1);
     expect(mondayIndex).toBeLessThan(fridayIndex);
+  });
+});
+
+describe("buildRetellBeginMessage", () => {
+  it("discloses it's a virtual assistant and that the call may be recorded", () => {
+    const msg = buildRetellBeginMessage("Acme Plumbing");
+    expect(msg).toContain("Acme Plumbing");
+    expect(msg).toContain("virtual assistant");
+    expect(msg).toContain("may be recorded");
+  });
+
+  it("falls back to a generic name when the business has none set", () => {
+    expect(buildRetellBeginMessage(null)).toContain("us");
+  });
+});
+
+describe("buildRetellGeneralPrompt", () => {
+  it("includes the knowledge summary plus the fixed behavior rules", () => {
+    const prompt = buildRetellGeneralPrompt({
+      client: {
+        business_name: "Acme Plumbing",
+        trade: "plumbing",
+        service_area: null,
+        services_offered: null,
+        after_hours_rules: null,
+        ai_never_say: null,
+      },
+      bookableServices: [],
+      availability: [],
+      faqs: [],
+    });
+    expect(prompt).toContain("Business: Acme Plumbing");
+    expect(prompt).toContain("flag_emergency");
+    expect(prompt).toContain("911");
+    expect(prompt).toContain("check_availability");
+    expect(prompt).toContain("book_appointment");
+    expect(prompt).toContain("create_or_update_lead");
   });
 });

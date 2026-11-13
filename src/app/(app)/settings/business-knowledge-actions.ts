@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth/session";
+import { pushBusinessKnowledgeToRetell } from "@/lib/retell/agent-sync";
 
 // Owner and sitewyre_admin/agency_admin only — office and crew view only.
 // An agency_admin's view-as session resolves to role "owner" (see
@@ -33,6 +34,7 @@ export async function updateBusinessKnowledge(
     .eq("id", client.id);
   if (error) return { error: error.message };
 
+  await pushBusinessKnowledgeToRetell(supabase, client.id);
   revalidatePath("/settings");
   return { ok: true };
 }
@@ -63,6 +65,7 @@ export async function addFaq(
   });
   if (error) return { error: error.message };
 
+  await pushBusinessKnowledgeToRetell(supabase, client.id);
   revalidatePath("/settings");
   return { ok: true };
 }
@@ -88,6 +91,7 @@ export async function updateFaq(
     .eq("client_id", client.id);
   if (error) return { error: error.message };
 
+  await pushBusinessKnowledgeToRetell(supabase, client.id);
   revalidatePath("/settings");
   return { ok: true };
 }
@@ -109,6 +113,7 @@ export async function deleteFaq(
     .eq("client_id", client.id);
   if (error) return { error: error.message };
 
+  await pushBusinessKnowledgeToRetell(supabase, client.id);
   revalidatePath("/settings");
   return { ok: true };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FakeSmsProvider, FakeEmailProvider, FakeAiProvider } from "@/lib/adapters";
+import { FakeSmsProvider, FakeEmailProvider, FakeAiProvider, FakeVoiceProvider } from "@/lib/adapters";
 import { leadIngestSchema } from "@/lib/validation/leads";
 import { getTradePreset } from "@/lib/trade-presets";
 import { normalizePhone, normalizeHost } from "@/lib/utils";
@@ -26,6 +26,15 @@ describe("adapters", () => {
     const ai = new FakeAiProvider();
     const text = await ai.suggestReply("new lead");
     expect(text.length).toBeGreaterThan(5);
+  });
+
+  it("fake voice records outbound calls and redirects", async () => {
+    const voice = new FakeVoiceProvider();
+    const call = await voice.createOutboundCall({ to: "+15551234567", from: "+15557654321", twiml: "<Response/>" });
+    expect(call.sid).toBeTruthy();
+    expect(voice.outboundCalls).toHaveLength(1);
+    await voice.redirectCall(call.sid, "<Response/>");
+    expect(voice.redirects).toEqual([{ callSid: call.sid, twiml: "<Response/>" }]);
   });
 });
 

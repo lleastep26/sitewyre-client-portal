@@ -7,6 +7,8 @@ import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
 import { validateTwilioSignature } from "@/lib/twilio/validate";
 import { getSmsProvider } from "@/lib/adapters";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
+import { getAppUrl } from "@/lib/supabase/env";
 import {
   findOpenLeadForPhone,
   isOwnerPhone,
@@ -53,8 +55,14 @@ export async function POST(request: Request) {
     });
   }
 
-  // Missed / no-answer call
-  if (callSid && (callStatus === "no-answer" || callStatus === "busy" || params.get("DialCallStatus") === "no-answer")) {
+  // Missed / no-answer call — the owner's Dial action callback. If the AI
+  // receptionist is on, hand the still-live caller to Retell here instead
+  // of just hanging up; missedCallTextBack (30s later) checks whether the
+  // handoff actually connected before deciding whether to still text back.
+  const dialCallStatus = params.get("DialCallStatus");
+  const ownerDidNotAnswer =
+    dialCallStatus === "no-answer" || dialCallStatus === "busy" || dialCallStatus === "failed";
+  if (callSid && (callStatus === "no-answer" || callStatus === "busy" || ownerDidNotAnswer)) {
     await supabase.from("calls").insert({
       client_id: client.id,
       direction: "inbound",
@@ -64,8 +72,26 @@ export async function POST(request: Request) {
     });
     await inngest.send({
       name: "portal/call.missed",
-      data: { clientId: client.id, from },
+      data: { clientId: client.id, from, callSid },
     });
+
+    if (client.ai_receptionist_enabled && client.retell_agent_id) {
+      try {
+        const { callId } = await registerRetellPhoneCall({
+          agentId: client.retell_agent_id,
+          fromNumber: from,
+          toNumber: to,
+          metadata: { client_id: client.id, caller_number: from, twilio_call_sid: callSid },
+        });
+        const actionUrl = `${getAppUrl()}/api/retell/dial-status`;
+        return new Response(
+          `<Response><Dial action="${actionUrl}"><Sip>${retellSipUri(callId)}</Sip></Dial></Response>`,
+          { headers: { "Content-Type": "text/xml" } },
+        );
+      } catch {
+        // Fall through to the normal hangup/missed-call-text-back path.
+      }
+    }
   }
 
   // Inbound SMS

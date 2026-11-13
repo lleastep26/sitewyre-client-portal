@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   generateSlots,
   isSlotAvailable,
+  isWithinBusinessHours,
   wallTimeToUtc,
 } from "@/lib/scheduling/slots";
 
@@ -141,5 +142,36 @@ describe("isSlotAvailable", () => {
         busy: [],
       }),
     ).toBe(true);
+  });
+});
+
+describe("isWithinBusinessHours", () => {
+  const monWindow = [
+    { weekday: 1, start_time: "09:00", end_time: "17:00", buffer_minutes: 0, min_notice_hours: 0 },
+  ];
+
+  it("is true inside a weekday window", () => {
+    const now = wallTimeToUtc("2026-11-02", 10 * 60, TZ); // Monday 10am
+    expect(isWithinBusinessHours(now, monWindow, TZ)).toBe(true);
+  });
+
+  it("is false before opening", () => {
+    const now = wallTimeToUtc("2026-11-02", 7 * 60, TZ); // Monday 7am
+    expect(isWithinBusinessHours(now, monWindow, TZ)).toBe(false);
+  });
+
+  it("is false at/after closing", () => {
+    const now = wallTimeToUtc("2026-11-02", 17 * 60, TZ); // Monday 5pm exactly
+    expect(isWithinBusinessHours(now, monWindow, TZ)).toBe(false);
+  });
+
+  it("is false on a day with no window", () => {
+    const now = wallTimeToUtc("2026-11-01", 10 * 60, TZ); // Sunday 10am
+    expect(isWithinBusinessHours(now, monWindow, TZ)).toBe(false);
+  });
+
+  it("is false with no availability at all", () => {
+    const now = wallTimeToUtc("2026-11-02", 10 * 60, TZ);
+    expect(isWithinBusinessHours(now, [], TZ)).toBe(false);
   });
 });

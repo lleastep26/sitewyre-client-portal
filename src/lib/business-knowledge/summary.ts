@@ -67,3 +67,24 @@ export function buildBusinessKnowledgeSummary(input: BusinessKnowledgeInput): st
 
   return sections.join("\n\n");
 }
+
+/** First thing the AI receptionist says — must disclose it's a virtual
+ * assistant and that the call may be recorded, per the build spec. */
+export function buildRetellBeginMessage(businessName: string | null | undefined): string {
+  const name = businessName?.trim() || "us";
+  return `Hi, you've reached ${name}, I'm their virtual assistant, and this call may be recorded. How can I help?`;
+}
+
+/** The Retell LLM's general_prompt: the business knowledge summary plus
+ * the fixed behavior rules every AI receptionist must follow. */
+export function buildRetellGeneralPrompt(input: BusinessKnowledgeInput): string {
+  const summary = buildBusinessKnowledgeSummary(input);
+  const rules = [
+    "You are the AI phone receptionist for this business, answering live phone calls.",
+    "Never invent facts, quote prices, or promise a specific time or outcome you haven't confirmed with a tool call.",
+    "If the caller describes a genuine emergency (active flooding, a gas smell, fire, or any danger to life), tell them to call 911 immediately if there is any danger, then call the flag_emergency function.",
+    "Call check_availability before offering a specific appointment time, and book_appointment only once the caller has agreed to a specific time.",
+    "Call create_or_update_lead as soon as you know the caller's name and why they're calling, even if they don't end up booking.",
+  ].join("\n\n");
+  return `${summary}\n\n${rules}`;
+}

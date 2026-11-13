@@ -188,6 +188,38 @@ export function generateSlots(opts: SlotOptions): Date[] {
   return slots;
 }
 
+function minutesSinceMidnight(d: Date, timeZone?: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+/** True if `now` falls inside one of the weekly availability windows —
+ * used to decide whether to ring the owner first (business hours) or hand
+ * straight to the AI receptionist (after hours). Ignores busy/buffer/notice,
+ * unlike generateSlots — this is just "is the shop open right now." */
+export function isWithinBusinessHours(
+  now: Date,
+  availability: AvailabilityWindow[],
+  timeZone?: string,
+): boolean {
+  const ymd = ymdFromDate(now, timeZone);
+  const weekday = weekdayForYmd(ymd, timeZone);
+  const nowMin = minutesSinceMidnight(now, timeZone);
+  return availability.some(
+    (a) =>
+      a.weekday === weekday &&
+      nowMin >= parseTimeToMinutes(a.start_time) &&
+      nowMin < parseTimeToMinutes(a.end_time),
+  );
+}
+
 /** True if the proposed interval is free given availability + busy + buffer. */
 export function isSlotAvailable(opts: {
   start: Date;

@@ -67,8 +67,24 @@ export type ClientRow = {
   services_offered: string | null;
   after_hours_rules: string | null;
   ai_never_say: string | null;
+  ai_receptionist_enabled: boolean;
+  ai_receptionist_booking_enabled: boolean;
+  ai_receptionist_callback_enabled: boolean;
+  retell_llm_id: string | null;
+  retell_agent_id: string | null;
+  retell_minutes_used_this_month: number;
+  retell_minutes_allowance: number;
   created_at: string;
   updated_at: string | null;
+};
+
+export type RetellUsageHistoryRow = {
+  id: string;
+  client_id: string;
+  month_start: string;
+  minutes_used: number;
+  minutes_allowance: number;
+  created_at: string;
 };
 
 export type ClientFaqRow = {
@@ -269,6 +285,7 @@ export type Database = {
         recording_url: string | null;
         missed: boolean;
         twilio_call_sid: string | null;
+        ai_handled: boolean;
         created_at: string;
       }>;
       reviews: TableDef<{
@@ -343,6 +360,7 @@ export type Database = {
       }>;
       client_faqs: TableDef<ClientFaqRow>;
       calendar_connections: TableDef<CalendarConnectionRow>;
+      retell_usage_history: TableDef<RetellUsageHistoryRow>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

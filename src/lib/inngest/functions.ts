@@ -359,12 +359,26 @@ export const missedCallTextBack = inngest.createFunction(
     event,
     step,
   }: {
-    event: { data: { clientId: string; from: string } };
+    event: { data: { clientId: string; from: string; callSid?: string } };
     step: Step;
   }) => {
-    const { clientId, from } = event.data;
+    const { clientId, from, callSid } = event.data;
     await step.sleep("wait-30s", "30s");
     const supabase = createAdminClient();
+
+    // If this call was handed to the AI receptionist and it actually
+    // connected (Retell call_started, see /api/retell/webhook), the AI handled it — never
+    // send the normal missed-call text on top of that. If the handoff
+    // failed or the caller hung up before connecting, ai_handled stays
+    // false and this falls through to the normal text-back below.
+    if (callSid) {
+      const { data: call } = await supabase
+        .from("calls")
+        .select("ai_handled")
+        .eq("twilio_call_sid", callSid)
+        .maybeSingle();
+      if (call?.ai_handled) return { skipped: true, reason: "ai_handled" };
+    }
 
     const auto = await getAutomationState(
       supabase,
@@ -1124,6 +1138,81 @@ export const monthlyResultsEmail = inngest.createFunction(
   },
 );
 
+/**
+ * Resets retell_minutes_used_this_month at midnight on the 1st of the
+ * month in each client's own timezone (not a single fixed UTC time, since
+ * clients span timezones) — and keeps a retell_usage_history row so
+ * overage can be billed after the counter resets. Runs every 15 minutes;
+ * the history table's unique(client_id, month_start) constraint makes the
+ * reset idempotent across the ~4 ticks that fall in the same local hour.
+ */
+export const retellMinutesMonthlyReset = inngest.createFunction(
+  { id: "retell-minutes-monthly-reset", triggers: [{ cron: "*/15 * * * *" }] },
+  async ({
+    step,
+  }: {
+    step: { run: <T>(id: string, fn: () => Promise<T>) => Promise<T> };
+  }) => {
+    return step.run("reset-all-clients", async () => {
+      const supabase = createAdminClient();
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, timezone, retell_minutes_used_this_month, retell_minutes_allowance")
+        .eq("status", "active");
+
+      const now = new Date();
+      let reset = 0;
+
+      for (const client of clients ?? []) {
+        const timeZone = client.timezone ?? "America/Chicago";
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          day: "2-digit",
+          hour: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(now);
+        const day = parts.find((p) => p.type === "day")?.value;
+        const hour = parts.find((p) => p.type === "hour")?.value;
+        if (day !== "01" || hour !== "00") continue;
+
+        // The usage being archived belongs to the month that just ended.
+        const ymdParts = new Intl.DateTimeFormat("en-CA", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+        }).formatToParts(now);
+        const year = Number(ymdParts.find((p) => p.type === "year")?.value);
+        const month = Number(ymdParts.find((p) => p.type === "month")?.value);
+        const prevYear = month === 1 ? year - 1 : year;
+        const prevMonth = month === 1 ? 12 : month - 1;
+        const monthStart = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+
+        const { data: inserted } = await supabase
+          .from("retell_usage_history")
+          .upsert(
+            {
+              client_id: client.id,
+              month_start: monthStart,
+              minutes_used: client.retell_minutes_used_this_month,
+              minutes_allowance: client.retell_minutes_allowance,
+            },
+            { onConflict: "client_id,month_start", ignoreDuplicates: true },
+          )
+          .select("id");
+        if (!inserted?.length) continue;
+
+        await supabase
+          .from("clients")
+          .update({ retell_minutes_used_this_month: 0 })
+          .eq("id", client.id);
+        reset += 1;
+      }
+
+      return { reset };
+    });
+  },
+);
+
 export const healthMonitor = inngest.createFunction(
   { id: "health-monitor", triggers: [{ cron: "*/15 * * * *" }] },
   async ({
@@ -1452,6 +1541,7 @@ export const functions = [
   quoteFollowUp,
   rebookingNudge,
   monthlyResultsEmail,
+  retellMinutesMonthlyReset,
   healthMonitor,
   emailDomainVerificationPoll,
   a2pPipelinePoll,
