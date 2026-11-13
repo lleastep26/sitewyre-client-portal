@@ -69,6 +69,10 @@ export type ClientRow = {
   ai_never_say: string | null;
   call_forwarding_enabled: boolean;
   business_line_phone: string | null;
+  form_capture_enabled: boolean;
+  website_consent_confirmed_at: string | null;
+  website_script_seen_at: string | null;
+  website_script_seen_host: string | null;
   ai_receptionist_enabled: boolean;
   ai_receptionist_booking_enabled: boolean;
   ai_receptionist_callback_enabled: boolean;
@@ -320,6 +324,19 @@ export type Database = {
         twilio_call_sid: string | null;
         ai_handled: boolean;
         forwarded_from: string | null;
+        created_at: string;
+      }>;
+      website_form_captures: TableDef<{
+        id: string;
+        client_id: string;
+        lead_id: string | null;
+        page_url: string | null;
+        form_label: string | null;
+        ip_hash: string | null;
+        consent_found: boolean;
+        consent_text: string | null;
+        sms_consent: boolean;
+        outcome: string;
         created_at: string;
       }>;
       reviews: TableDef<{

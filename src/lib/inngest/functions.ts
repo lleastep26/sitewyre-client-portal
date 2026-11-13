@@ -15,7 +15,7 @@ import {
   shouldNudgeOwnerForSla,
   slaNudgeOutcome,
 } from "@/lib/leads/speed-to-lead";
-import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
+import { isOptedOut, logSkippedOptOut, smsBlockReason } from "@/lib/funnels/opt-out";
 import { hasRecentSend } from "@/lib/funnels/dedupe";
 import { buildReviewMessage } from "@/lib/funnels/review-link";
 import { nextFunnelSendableAt } from "@/lib/funnels/quiet-hours";
@@ -118,12 +118,15 @@ export const leadAutoReply = inngest.createFunction(
     // Why the instant text did or didn't go out — recorded on the lead's
     // timeline, so a blocked text never shows up as "sent".
     const a2p = checkA2pGate(client, to);
+    // Opted out, or never agreed to texts (checked by phone number, so a
+    // lead captured without consent wording is never texted).
+    const blockReason = to ? await smsBlockReason(supabase, clientId, to) : null;
     const smsOutcome = !to
       ? "no_phone"
       : !client.twilio_phone_number
         ? "no_number"
-        : (await isOptedOut(supabase, clientId, to))
-          ? "opted_out"
+        : blockReason
+          ? blockReason
           : !a2p.allowed
             ? a2p.reason
             : "sent";
@@ -253,6 +256,10 @@ export const leadFollowUpSequence = inngest.createFunction(
       }
 
       const to = normalizePhone(lead.phone || phone);
+      if (!to) {
+        await logSkip(stepNum, "no_phone");
+        return false;
+      }
       const a2p = checkA2pGate(client, to);
       if (!a2p.allowed) {
         await logSkip(stepNum, a2p.reason);

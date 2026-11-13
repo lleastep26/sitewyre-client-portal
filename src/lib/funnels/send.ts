@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { getSmsProvider } from "@/lib/adapters";
-import { isOptedOut, logSkippedOptOut } from "./opt-out";
+import { smsBlockReason } from "./opt-out";
 import { checkA2pGate } from "./a2p-gate";
 
 export type SendFunnelMessageParams = {
@@ -17,13 +17,13 @@ export type SendFunnelMessageParams = {
 
 export type SendFunnelMessageResult =
   | { status: "sent"; sid: string }
-  | { status: "skipped"; reason: "opted_out" }
+  | { status: "skipped"; reason: "opted_out" | "no_sms_consent" | "no_phone" }
   | { status: "skipped"; reason: `a2p_${string}` };
 
 /**
- * Opt-out check, then send + log to messages/workflow_runs. Quiet-hours
- * timing is the caller's responsibility (see quiet-hours.ts) — this only
- * guards against sending to an opted-out number.
+ * Opt-out and consent check, A2P check, then send + log to
+ * messages/workflow_runs. Quiet-hours timing is the caller's
+ * responsibility (see quiet-hours.ts).
  */
 export async function sendFunnelMessage(
   supabase: SupabaseClient<Database>,
@@ -31,13 +31,16 @@ export async function sendFunnelMessage(
 ): Promise<SendFunnelMessageResult> {
   const { clientId, trigger, to, from, body, contactId, aiGenerated } = params;
 
-  if (await isOptedOut(supabase, clientId, to, contactId)) {
-    await logSkippedOptOut(supabase, {
-      clientId,
+  // A lead with no phone number (an email-only website enquiry).
+  const blocked = to ? await smsBlockReason(supabase, clientId, to, contactId) : "no_phone";
+  if (blocked) {
+    await supabase.from("workflow_runs").insert({
+      client_id: clientId,
       trigger,
-      log: { to, contactId },
+      status: "skipped",
+      log: { reason: blocked, to, contactId },
     });
-    return { status: "skipped", reason: "opted_out" };
+    return { status: "skipped", reason: blocked };
   }
 
   const { data: client } = await supabase

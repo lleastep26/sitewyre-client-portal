@@ -119,9 +119,13 @@ describe("GET /api/public/chat/config", () => {
 
   it("returns only enabled: false when the widget is off or the key is unknown", async () => {
     clientRow = { ...clientRow, chat_widget_enabled: false };
-    expect(await config()).toEqual({ enabled: false });
+    // Chat off: no chat details, but the script still learns the site key
+    // and whether to capture forms.
+    expect(await config()).toEqual({ enabled: false, capture: false, site_key: "abc" });
+    clientRow = { ...clientRow, form_capture_enabled: true };
+    expect(await config()).toEqual({ enabled: false, capture: true, site_key: "abc" });
     clientRow = null;
-    expect(await config("nope")).toEqual({ enabled: false });
+    expect(await config("nope")).toEqual({ enabled: false, capture: false });
   });
 
   it("ignores a brand colour that isn't a plain hex value", async () => {

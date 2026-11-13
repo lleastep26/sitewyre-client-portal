@@ -81,6 +81,8 @@ export async function POST(request: Request) {
     message: input.message,
     source: "chat_widget",
     smsOptIn: true,
+    // The chat form shows the SMS consent wording above its button.
+    consentShown: true,
   });
   if ("error" in lead) return json({ error: "Something went wrong. Please try again." }, 500);
 

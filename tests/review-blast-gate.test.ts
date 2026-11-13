@@ -10,6 +10,7 @@ function fakeSupabase(responses: Record<string, { data: unknown }>) {
       const chain = {
         select: () => chain,
         eq: () => chain,
+        contains: () => chain,
         gt: () => chain,
         order: () => chain,
         limit: () => chain,

@@ -2,25 +2,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { normalizePhone } from "@/lib/utils";
 
+export type SmsBlockReason = "opted_out" | "no_sms_consent";
+
 /**
- * A phone is opted out only on a genuine signal: a row in `opt_outs` (a real
- * STOP reply, or a CSV import skip) or a contact whose `sms_opt_in` is
- * explicitly false. `sms_opt_in` is `not null default true` in the schema
- * and every write path defaults it true — it is only ever set false by a
- * real STOP reply (src/app/api/twilio/webhook/route.ts) or a lead choosing
- * to opt out on the public form, so treating `false` as "opted out" here
- * is safe and never catches a default or a null.
+ * Why a customer must not be texted, or null when they can be.
+ *
+ * - "opted_out": the number has a row in `opt_outs` (a real STOP reply, or
+ *   a CSV import skip).
+ * - "no_sms_consent": the contact's `sms_opt_in` is false with no STOP on
+ *   file. That's a lead who came in without agreeing to texts: one who
+ *   declined on a form, or one captured from a client's own website form
+ *   before the client confirmed their consent wording is shown.
+ *
+ * `sms_opt_in` is `not null default true`, so a default or missing value
+ * never blocks. The contact is looked up by `contactId` when the caller
+ * has it and by phone number otherwise, so every text path honours the
+ * flag whether or not it knows the contact.
  *
  * Normalizes `phone` itself (idempotent on an already-normalized number) so
  * every opt_outs read/write goes through the same normalization regardless
  * of what the caller passed in.
  */
-export async function isOptedOut(
+export async function smsBlockReason(
   supabase: SupabaseClient<Database>,
   clientId: string,
   phone: string,
   contactId?: string | null,
-): Promise<boolean> {
+): Promise<SmsBlockReason | null> {
   const normalized = normalizePhone(phone);
   const { data: optOut } = await supabase
     .from("opt_outs")
@@ -28,7 +36,7 @@ export async function isOptedOut(
     .eq("client_id", clientId)
     .eq("phone", normalized)
     .maybeSingle();
-  if (optOut) return true;
+  if (optOut) return "opted_out";
 
   if (contactId) {
     const { data: contact } = await supabase
@@ -36,10 +44,34 @@ export async function isOptedOut(
       .select("sms_opt_in")
       .eq("id", contactId)
       .maybeSingle();
-    if (contact?.sms_opt_in === false) return true;
+    if (contact?.sms_opt_in === false) return "no_sms_consent";
   }
 
-  return false;
+  // Also by number: the caller may not know the contact, or the same
+  // number may sit on another contact record that has no consent.
+  if (normalized) {
+    const { data: withoutConsent } = await supabase
+      .from("contacts")
+      .select("sms_opt_in")
+      .eq("client_id", clientId)
+      .eq("sms_opt_in", false)
+      .contains("phones", [normalized])
+      .limit(1)
+      .maybeSingle();
+    if (withoutConsent?.sms_opt_in === false) return "no_sms_consent";
+  }
+
+  return null;
+}
+
+/** True when the customer must not be texted, for either reason above. */
+export async function isOptedOut(
+  supabase: SupabaseClient<Database>,
+  clientId: string,
+  phone: string,
+  contactId?: string | null,
+): Promise<boolean> {
+  return (await smsBlockReason(supabase, clientId, phone, contactId)) !== null;
 }
 
 /** Record a real opt-out (e.g. an inbound STOP reply). Idempotent. */

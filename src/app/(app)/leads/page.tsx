@@ -160,6 +160,9 @@ function blockReasonLabel(reason: string): string {
   if (reason === "no_number") return "this business has no texting number yet";
   if (reason === "no_phone") return "the lead has no phone number";
   if (reason === "opted_out") return "the customer opted out of texts";
+  if (reason === "no_sms_consent") {
+    return "the customer hasn't agreed to receive texts (the form they used didn't show the SMS consent wording)";
+  }
   if (reason.startsWith("a2p_")) {
     return `texting registration isn't approved yet (${reason.slice(4).replaceAll("_", " ")})`;
   }

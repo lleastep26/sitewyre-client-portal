@@ -11,15 +11,22 @@ function fakeSupabase(contact: unknown) {
   return {
     from(table: string) {
       if (table === "contacts") {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({ data: contact, error: null }),
-              }),
-            }),
-          }),
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          contains: () => chain,
+          limit: () => chain,
+          maybeSingle: async () => ({ data: contact, error: null }),
         };
+        return chain;
+      }
+      if (table === "opt_outs") {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+        return chain;
       }
       if (table === "messages") {
         return { insert: async () => ({ error: null }) };

@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       source: input.source ?? "website_form",
       service: input.service ?? null,
       smsOptIn: input.sms_opt_in ?? true,
+      consentShown: input.sms_opt_in === true,
     });
     if ("error" in result) return json({ error: result.error }, 500);
 

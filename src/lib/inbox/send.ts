@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
 import type { ClientRow, Database } from "@/lib/supabase/types";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { smsBlockReason } from "@/lib/funnels/opt-out";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { resolveEmailFromAddress } from "@/lib/email/from-address";
 
@@ -42,8 +43,12 @@ export async function sendInboxMessageForClient(
     if (!phone || !client.twilio_phone_number) {
       return { error: "SMS not available" };
     }
-    if (contact.sms_opt_in === false) {
-      return { error: "Contact opted out of SMS" };
+    const blocked = await smsBlockReason(supabase, client.id, phone, contact.id);
+    if (blocked === "opted_out") return { error: "Contact opted out of SMS" };
+    if (blocked === "no_sms_consent") {
+      return {
+        error: "This contact hasn't agreed to receive texts. Call or email them instead.",
+      };
     }
     const a2p = checkA2pGate(client, phone);
     if (!a2p.allowed) {

@@ -14,6 +14,12 @@ export type IngestLeadInput = {
   source: string;
   service?: string | null;
   smsOptIn?: boolean;
+  /**
+   * The form this lead came from showed the SMS consent wording. If the
+   * person is already a contact with no consent on file, this gives it,
+   * unless they have texted STOP (that always wins).
+   */
+  consentShown?: boolean;
 };
 
 /**
@@ -34,6 +40,19 @@ export async function ingestLead(
     source: input.source,
     smsOptIn: input.smsOptIn ?? true,
   });
+
+  const phone = normalizePhone(input.phone);
+  if (input.consentShown && contact.sms_opt_in === false && phone) {
+    const { data: stopped } = await supabase
+      .from("opt_outs")
+      .select("phone")
+      .eq("client_id", client.id)
+      .eq("phone", phone)
+      .maybeSingle();
+    if (!stopped) {
+      await supabase.from("contacts").update({ sms_opt_in: true }).eq("id", contact.id);
+    }
+  }
 
   const { data: newStage } = await supabase
     .from("pipeline_stages")

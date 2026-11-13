@@ -33,6 +33,12 @@ function makeTable(
     eq() {
       return chain;
     },
+    contains() {
+      return chain;
+    },
+    limit() {
+      return chain;
+    },
     update() {
       return chain;
     },
