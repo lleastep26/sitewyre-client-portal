@@ -17,6 +17,10 @@ import { onlinePaymentsEnabled } from "@/lib/flags";
 import { BusinessProfileTab } from "./business-profile-tab";
 import { PhoneTab } from "./phone-tab";
 import { CallForwardingCard } from "./call-forwarding-card";
+import { WebsiteTab, type EmbedSnippet, type WebsiteStatusView } from "./website-tab";
+import { websiteStatus } from "@/lib/website/status";
+import { INSTALL_GUIDES, gtmSnippet, websiteSnippet } from "@/lib/website/install-guides";
+import { smsConsentText, smsPrivacySection } from "@/lib/a2p/consent-text";
 import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
 import { BusinessKnowledgeTab } from "./business-knowledge-tab";
@@ -533,9 +537,57 @@ export default async function SettingsPage({
     </div>
   );
 
+  const timeZoneForLabels = client.timezone ?? "America/Chicago";
+  const dateLabel = (iso: string) =>
+    new Date(iso).toLocaleString("en-US", {
+      timeZone: timeZoneForLabels,
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  const siteStatus = websiteStatus(client);
+  const siteStatusView: WebsiteStatusView =
+    siteStatus.state === "connected" || siteStatus.state === "other_site"
+      ? { state: siteStatus.state, host: siteStatus.host, seenLabel: dateLabel(siteStatus.seenAt) }
+      : siteStatus;
+  const embedSnippets: EmbedSnippet[] = [];
+  const websiteTab = (
+    <Card>
+      <CardTitle>Your website</CardTitle>
+      <CardDescription className="mt-1">
+        Use Sitewyre on a website you already have: chat, leads from your own forms, and online
+        booking.
+      </CardDescription>
+      <div className="mt-4">
+        <WebsiteTab
+          canEdit={canEditBusinessProfile}
+          domain={client.domain}
+          status={siteStatusView}
+          snippet={client.site_key ? websiteSnippet(getAppUrl(), client.site_key) : null}
+          gtmSnippet={client.site_key ? gtmSnippet(getAppUrl(), client.site_key) : null}
+          captureEnabled={client.form_capture_enabled}
+          chatEnabled={client.chat_widget_enabled}
+          consentConfirmedLabel={
+            client.website_consent_confirmed_at ? dateLabel(client.website_consent_confirmed_at) : null
+          }
+          consentText={smsConsentText(client.business_name)}
+          privacyText={smsPrivacySection(client.business_name)}
+          guides={INSTALL_GUIDES}
+          embeds={embedSnippets}
+        />
+      </div>
+    </Card>
+  );
+
   const a2pTab = (
     <Card>
       <CardTitle>Texting registration (A2P)</CardTitle>
+      {client.form_capture_enabled && !client.website_consent_confirmed_at ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Form capture is on, but you haven&apos;t confirmed that your website&apos;s forms show the
+          text message consent wording (Your website tab). Carriers check for it when they review
+          your registration, and leads from those forms won&apos;t be texted until you confirm.
+        </p>
+      ) : null}
       <A2pTab
         canEdit={canEditBusinessProfile}
         isAdmin={role === "sitewyre_admin"}
@@ -631,11 +683,7 @@ export default async function SettingsPage({
           <ChatWidgetCard
             canEdit={canEditBusinessProfile}
             enabled={client.chat_widget_enabled}
-            snippet={
-              client.site_key
-                ? `<script src="${getAppUrl()}/widget.js" data-site-key="${client.site_key}" async></script>`
-                : null
-            }
+            snippet={client.site_key ? websiteSnippet(getAppUrl(), client.site_key) : null}
             allowedSite={client.domain}
             repliesUsedThisMonth={client.ai_chat_replies_used_this_month}
           />
@@ -697,6 +745,7 @@ export default async function SettingsPage({
           { id: "general", label: "General", content: generalTab },
           { id: "profile", label: "Business Profile", content: businessProfileTab },
           { id: "phone", label: "Phone", content: phoneTab },
+          { id: "website", label: "Your website", content: websiteTab },
           { id: "a2p", label: "Texting registration", content: a2pTab },
           { id: "email", label: "Email", content: emailTab },
           { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },

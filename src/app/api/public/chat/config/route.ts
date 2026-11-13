@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { json, options } from "@/lib/http/cors";
 import { normalizeHost } from "@/lib/utils";
 import { smsConsentText } from "@/lib/a2p/consent-text";
+import { recordScriptSeen } from "@/lib/website/status";
 
 export function OPTIONS() {
   return options();
@@ -26,9 +27,19 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
   const query = supabase
     .from("clients")
-    .select("business_name, brand_colors, chat_widget_enabled, form_capture_enabled, site_key");
+    .select(
+      "id, business_name, brand_colors, chat_widget_enabled, form_capture_enabled, site_key, website_script_seen_at, website_script_seen_host",
+    );
   const { data: client } = await (siteKey ? query.eq("site_key", siteKey) : query.eq("domain", domain)).maybeSingle();
   if (!client?.site_key) return json({ enabled: false, capture: false });
+
+  // The script asks for this on every page it loads on, which is how the
+  // portal knows it's installed ("Connected to your website").
+  await recordScriptSeen(
+    supabase,
+    client,
+    request.headers.get("origin") ?? request.headers.get("referer"),
+  ).catch(() => undefined);
 
   const capture = client.form_capture_enabled === true;
   if (!client.chat_widget_enabled) {
