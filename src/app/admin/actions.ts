@@ -4,11 +4,18 @@ import Stripe from "stripe";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ADMIN_VIEW_COOKIE, requireAdmin } from "@/lib/auth/session";
+import {
+  ADMIN_VIEW_COOKIE,
+  requireAdmin,
+  requireAgencyOrSitewyreAdmin,
+} from "@/lib/auth/session";
 import { normalizePhone } from "@/lib/utils";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEmailProvider } from "@/lib/adapters";
 import { welcomeEmailHtml } from "@/lib/email/welcome";
+import { createAccountSchema } from "@/lib/validation/leads";
+import { createClientAccount } from "@/lib/accounts/create-client";
+import { SITEWYRE_AGENCY_ID } from "@/lib/agencies";
 import {
   buyLocalNumberWithWebhooks,
   numberPurchaseBlockReason,
@@ -17,17 +24,42 @@ import {
 
 const A2P_STATUSES = ["pending", "approved", "failed"] as const;
 
+/**
+ * Confirms a client belongs to the caller's scope: any client for a
+ * sitewyre_admin (agencyId null), only clients in their own agency for
+ * an agency_admin. Use for every action an agency_admin may call on a
+ * specific client_id, so one agency can never read or write another's
+ * sub-account by passing a different clientId in the form.
+ */
+async function assertClientInScope(
+  supabase: Awaited<ReturnType<typeof requireAgencyOrSitewyreAdmin>>["supabase"],
+  clientId: string,
+  agencyId: string | null,
+): Promise<{ error: string } | { ok: true }> {
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, agency_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (!client) return { error: "Client not found" };
+  if (agencyId && client.agency_id !== agencyId) {
+    return { error: "Client not found" };
+  }
+  return { ok: true };
+}
+
 export async function switchAdminViewClient(formData: FormData) {
-  const { supabase, user } = await requireAdmin();
+  const { supabase, user, agencyId } = await requireAgencyOrSitewyreAdmin();
   const clientId = String(formData.get("clientId") ?? "").trim();
   if (!clientId) redirect("/admin");
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id")
+    .select("id, agency_id")
     .eq("id", clientId)
     .maybeSingle();
   if (!client) redirect("/admin");
+  if (agencyId && client.agency_id !== agencyId) redirect("/admin");
 
   const cookieStore = await cookies();
   cookieStore.set(ADMIN_VIEW_COOKIE, client.id, {
@@ -50,10 +82,50 @@ export async function switchAdminViewClient(formData: FormData) {
 }
 
 export async function clearAdminViewClient() {
-  await requireAdmin();
+  await requireAgencyOrSitewyreAdmin();
   const cookieStore = await cookies();
   cookieStore.delete(ADMIN_VIEW_COOKIE);
   redirect("/admin");
+}
+
+export async function addClient(
+  formData: FormData,
+): Promise<{ ok: true; clientId: string } | { error: string }> {
+  const { user, agencyId } = await requireAgencyOrSitewyreAdmin();
+
+  const parsed = createAccountSchema.safeParse({
+    business_name: String(formData.get("businessName") ?? "").trim(),
+    trade: String(formData.get("niche") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim() || undefined,
+    email: String(formData.get("ownerEmail") ?? "").trim(),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const ownerName = String(formData.get("ownerName") ?? "").trim();
+
+  // Account creation needs the Supabase Admin API (auth.admin.createUser)
+  // and an insert into clients, which has no policy allowing even
+  // sitewyre_admin/agency_admin to insert directly — both require the
+  // service-role client, same as the n8n-facing route.
+  const admin = createAdminClient();
+  const result = await createClientAccount(admin, parsed.data, {
+    agencyId: agencyId ?? SITEWYRE_AGENCY_ID,
+    actorId: user.id,
+    auditVia: "admin_add_client",
+  });
+  if ("error" in result) return result;
+
+  if (ownerName) {
+    await admin
+      .from("clients")
+      .update({ owner_name: ownerName })
+      .eq("id", result.clientId);
+  }
+
+  revalidatePath("/admin");
+  return { ok: true, clientId: result.clientId };
 }
 
 async function getClientForNumberPurchase(
@@ -74,6 +146,8 @@ async function getClientForNumberPurchase(
   return { client };
 }
 
+// Twilio number purchases are platform-only: real money, A2P and
+// porting implications an agency shouldn't trigger on its own.
 export async function previewClientNumber(
   formData: FormData,
 ): Promise<{ phoneNumber: string; monthlyPrice: string } | { error: string }> {
@@ -122,9 +196,15 @@ export async function buyClientNumber(formData: FormData) {
   return { ok: true, phoneNumber: purchased.phoneNumber };
 }
 
-export async function setClientCallRouting(formData: FormData) {
-  const { supabase } = await requireAdmin();
+export async function setClientCallRouting(
+  formData: FormData,
+): Promise<{ ok: true } | { error: string }> {
+  const { supabase, agencyId } = await requireAgencyOrSitewyreAdmin();
   const clientId = String(formData.get("clientId") ?? "");
+
+  const scope = await assertClientInScope(supabase, clientId, agencyId);
+  if ("error" in scope) return scope;
+
   const forwardPhoneRaw = String(formData.get("forwardPhone") ?? "").trim();
   const dialTimeoutRaw = String(formData.get("dialTimeoutSeconds") ?? "").trim();
 
@@ -148,6 +228,8 @@ export async function setClientCallRouting(formData: FormData) {
   return { ok: true };
 }
 
+// Manually overriding A2P approval status is platform-only — same
+// compliance weight as the "same legal entity" option below.
 export async function setClientA2pStatus(formData: FormData) {
   const { supabase } = await requireAdmin();
   const clientId = String(formData.get("clientId") ?? "");
@@ -166,6 +248,8 @@ export async function setClientA2pStatus(formData: FormData) {
   return { ok: true };
 }
 
+// Billing is signed up manually and linked here — platform-only, same
+// as the Stripe subscription itself.
 export async function linkStripeCustomer(
   formData: FormData,
 ): Promise<{ ok: true; plan: string; status: string } | { error: string }> {
@@ -233,15 +317,16 @@ export async function linkStripeCustomer(
 export async function resendWelcomeEmail(
   formData: FormData,
 ): Promise<{ ok: true } | { error: string }> {
-  const { supabase, user } = await requireAdmin();
+  const { supabase, user, agencyId } = await requireAgencyOrSitewyreAdmin();
   const clientId = String(formData.get("clientId") ?? "");
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id, business_name")
+    .select("id, agency_id, business_name")
     .eq("id", clientId)
     .maybeSingle();
   if (!client) return { error: "Client not found" };
+  if (agencyId && client.agency_id !== agencyId) return { error: "Client not found" };
 
   const { data: membership } = await supabase
     .from("memberships")

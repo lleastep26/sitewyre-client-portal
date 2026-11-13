@@ -28,7 +28,7 @@ export function CallRoutingForm({
       fd.set("forwardPhone", forward);
       fd.set("dialTimeoutSeconds", timeout);
       const result = await setClientCallRouting(fd);
-      if (result.error) setError(result.error);
+      if ("error" in result) setError(result.error);
       else setSaved(true);
     });
   }

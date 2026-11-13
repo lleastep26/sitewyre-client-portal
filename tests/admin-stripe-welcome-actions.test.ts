@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let fakeSupabase: unknown;
-let fakeClientRow: { id: string; business_name: string | null };
+let fakeClientRow: { id: string; agency_id: string; business_name: string | null };
 let fakeMembership: { user_id: string } | null;
+let fakeIsSitewyreAdmin: boolean;
+let fakeAgencyId: string | null;
 
 const customersRetrieve = vi.fn();
 const subscriptionsList = vi.fn();
@@ -18,6 +20,12 @@ vi.mock("stripe", () => ({
 }));
 vi.mock("@/lib/auth/session", () => ({
   requireAdmin: async () => ({ supabase: fakeSupabase, user: { id: "admin1" } }),
+  requireAgencyOrSitewyreAdmin: async () => ({
+    supabase: fakeSupabase,
+    user: { id: "admin1" },
+    isSitewyreAdmin: fakeIsSitewyreAdmin,
+    agencyId: fakeAgencyId,
+  }),
   ADMIN_VIEW_COOKIE: "admin_view_client_id",
 }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -76,8 +84,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://portal.example.com");
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_123");
-  fakeClientRow = { id: "client1", business_name: "Acme Plumbing" };
+  fakeClientRow = { id: "client1", agency_id: "agency1", business_name: "Acme Plumbing" };
   fakeMembership = { user_id: "user1" };
+  fakeIsSitewyreAdmin = true;
+  fakeAgencyId = null;
   fakeSupabase = buildSupabase();
 });
 
@@ -172,5 +182,23 @@ describe("resendWelcomeEmail", () => {
         html: expect.stringContaining("https://portal.example.com/login"),
       }),
     );
+  });
+
+  it("an agency_admin can resend for their own client", async () => {
+    fakeIsSitewyreAdmin = false;
+    fakeAgencyId = "agency1";
+    getUserById.mockResolvedValue({ data: { user: { email: "owner@example.com" } }, error: null });
+    const { resendWelcomeEmail } = await import("@/app/admin/actions");
+    const result = await resendWelcomeEmail(fd({ clientId: "client1" }));
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("an agency_admin cannot resend for a client outside their agency", async () => {
+    fakeIsSitewyreAdmin = false;
+    fakeAgencyId = "some-other-agency";
+    const { resendWelcomeEmail } = await import("@/app/admin/actions");
+    const result = await resendWelcomeEmail(fd({ clientId: "client1" }));
+    expect(result).toEqual({ error: "Client not found" });
+    expect(emailSend).not.toHaveBeenCalled();
   });
 });

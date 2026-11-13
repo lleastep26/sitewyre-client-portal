@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ClientRow, MembershipRole, MembershipRow } from "@/lib/supabase/types";
 
-/** Which client a sitewyre_admin is currently "viewing as". Read-only for
- * everyone except the admin switcher action — never trusted without
- * re-verifying both admin status and the client's existence server-side. */
+/** Which client a sitewyre_admin or agency_admin is currently "viewing
+ * as". Read-only for everyone except the admin switcher action — never
+ * trusted without re-verifying admin/agency status and the client's
+ * existence (and, for an agency_admin, agency ownership) server-side. */
 export const ADMIN_VIEW_COOKIE = "admin_view_client_id";
 
 export async function requireUser() {
@@ -15,6 +16,21 @@ export async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return { supabase, user };
+}
+
+/** The agency_id a user administers, or null if they aren't an
+ * agency_admin. A user can only belong to one agency today. */
+async function getAgencyAdminAgencyId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("agency_memberships")
+    .select("agency_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  return data?.agency_id ?? null;
 }
 
 export async function requireMembership(preferredClientId?: string) {
@@ -28,7 +44,12 @@ export async function requireMembership(preferredClientId?: string) {
   const list = (memberships ?? []) as MembershipRow[];
   // Recomputed fresh from the DB on every call — never cached — so a role
   // change (promotion or demotion) takes effect on the very next request.
-  const isAdmin = list.some((m) => m.role === "sitewyre_admin");
+  const isSitewyreAdmin = list.some((m) => m.role === "sitewyre_admin");
+  const agencyId = isSitewyreAdmin
+    ? null
+    : await getAgencyAdminAgencyId(supabase, user.id);
+  const isAgencyAdmin = Boolean(agencyId);
+  const canViewAs = isSitewyreAdmin || isAgencyAdmin;
 
   // No `?? list[0]` fallback here: a sitewyre_admin's own membership row
   // must never be used as "their" client — that row only exists to satisfy
@@ -43,6 +64,7 @@ export async function requireMembership(preferredClientId?: string) {
 
   let client: ClientRow | null = null;
   let role: MembershipRole = "owner";
+  let viewingAs = false;
 
   if (membership) {
     role = membership.role;
@@ -62,10 +84,11 @@ export async function requireMembership(preferredClientId?: string) {
     role = "owner";
   }
 
-  // The admin_view_client_id cookie is read ONLY inside this isAdmin branch.
-  // A non-admin's cookie (stale, forged, or left over from a past admin
-  // role) is never consulted — isAdmin above is freshly derived, not cached.
-  if (!client && isAdmin) {
+  // The admin_view_client_id cookie is read ONLY inside this branch, for a
+  // sitewyre_admin or agency_admin. A regular member's cookie (stale,
+  // forged, or left over from a past admin/agency_admin role) is never
+  // consulted — canViewAs above is freshly derived, not cached.
+  if (!client && canViewAs) {
     const cookieStore = await cookies();
     const cookieValue = cookieStore.get(ADMIN_VIEW_COOKIE)?.value;
     const candidateId = preferredClientId ?? cookieValue;
@@ -77,13 +100,23 @@ export async function requireMembership(preferredClientId?: string) {
         .eq("id", candidateId)
         .maybeSingle();
 
-      if (data) {
+      // An agency_admin may only view-as a client in their own agency —
+      // anything else is treated exactly like a stale/invalid cookie.
+      const allowed = data && (isSitewyreAdmin || data.agency_id === agencyId);
+
+      if (allowed) {
         client = data;
-        role = "sitewyre_admin";
+        // An agency_admin gets owner-level access to their own
+        // sub-accounts; sitewyre_admin keeps its own distinct role so
+        // platform-only checks (role === "sitewyre_admin") stay exactly
+        // that — never satisfied by an agency_admin's view-as session.
+        role = isSitewyreAdmin ? "sitewyre_admin" : "owner";
+        viewingAs = true;
       } else if (cookieValue && cookieValue === candidateId) {
-        // Cookie points at a client that no longer exists. Route Handlers
-        // (unlike Server Components) are allowed to mutate cookies, so
-        // clearing it happens there, then back to /admin to pick again.
+        // Cookie points at a client that no longer exists, or (for an
+        // agency_admin) one outside their agency. Route Handlers (unlike
+        // Server Components) are allowed to mutate cookies, so clearing
+        // it happens there, then back to /admin to pick again.
         redirect("/admin/clear-invalid-client");
       }
     }
@@ -95,7 +128,7 @@ export async function requireMembership(preferredClientId?: string) {
     }
   }
 
-  if (!client && !isAdmin) {
+  if (!client && !canViewAs) {
     redirect("/login?error=no_membership");
   }
 
@@ -104,17 +137,50 @@ export async function requireMembership(preferredClientId?: string) {
     user,
     client,
     role,
-    isAdmin,
+    viewingAs,
+    isSitewyreAdmin,
+    isAgencyAdmin,
+    agencyId,
+    // Broadened to "can access /admin" (sitewyre_admin or agency_admin) —
+    // use isSitewyreAdmin above for anything platform-only.
+    isAdmin: canViewAs,
     memberships: list,
   };
 }
 
 /**
- * Admin-only check with no client resolution. Use this for /admin itself
- * (and its actions) instead of requireMembership — requireMembership can
- * redirect an admin to /admin, so if /admin also called requireMembership
- * it would risk a redirect loop. This never reads or depends on the
- * admin_view_client_id cookie.
+ * sitewyre_admin or agency_admin, with no client resolution. Use this for
+ * /admin itself (and actions both roles may use) instead of
+ * requireMembership — requireMembership can redirect to /admin, so if
+ * /admin also called requireMembership it would risk a redirect loop.
+ * This never reads or depends on the admin_view_client_id cookie.
+ * agencyId is null for a sitewyre_admin (who sees every agency).
+ */
+export async function requireAgencyOrSitewyreAdmin() {
+  const { supabase, user } = await requireUser();
+
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("*")
+    .eq("user_id", user.id);
+
+  const isSitewyreAdmin = ((memberships ?? []) as MembershipRow[]).some(
+    (m) => m.role === "sitewyre_admin",
+  );
+  const agencyId = isSitewyreAdmin
+    ? null
+    : await getAgencyAdminAgencyId(supabase, user.id);
+
+  if (!isSitewyreAdmin && !agencyId) redirect("/");
+
+  return { supabase, user, isSitewyreAdmin, agencyId };
+}
+
+/**
+ * Strictly sitewyre_admin — use for platform-only actions (Stripe
+ * customer linking, Twilio number purchases, A2P "same legal entity",
+ * SMS/AI allowances, manual A2P status overrides): anything an agency
+ * shouldn't be able to do for its own sub-accounts.
  */
 export async function requireAdmin() {
   const { supabase, user } = await requireUser();

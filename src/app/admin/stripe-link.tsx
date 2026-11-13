@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { linkStripeCustomer, resendWelcomeEmail } from "./actions";
+import { linkStripeCustomer } from "./actions";
 
 function statusLabel(status: string | null): { text: string; className: string } {
   switch (status) {
@@ -34,9 +34,7 @@ export function StripeLink({
   const [status, setStatus] = useState(billingStatus);
   const [plan, setPlan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [welcomePending, startWelcome] = useTransition();
 
   function link() {
     setError(null);
@@ -50,16 +48,6 @@ export function StripeLink({
         setStatus(result.status);
         setPlan(result.plan);
       }
-    });
-  }
-
-  function resendWelcome() {
-    setWelcomeMessage(null);
-    startWelcome(async () => {
-      const fd = new FormData();
-      fd.set("clientId", clientId);
-      const result = await resendWelcomeEmail(fd);
-      setWelcomeMessage("error" in result ? result.error : "Welcome email sent.");
     });
   }
 
@@ -86,18 +74,6 @@ export function StripeLink({
           {label.text}
         </p>
       ) : null}
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={welcomePending}
-          onClick={resendWelcome}
-        >
-          {welcomePending ? "…" : "Resend welcome email"}
-        </Button>
-        {welcomeMessage ? <span className="text-charcoal/60">{welcomeMessage}</span> : null}
-      </div>
     </div>
   );
 }

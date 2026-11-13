@@ -1,7 +1,23 @@
 export type MembershipRole = "owner" | "office" | "crew" | "sitewyre_admin";
 
+export type AgencyRow = {
+  id: string;
+  name: string;
+  owner_user_id: string | null;
+  created_at: string;
+};
+
+export type AgencyMembershipRow = {
+  id: string;
+  user_id: string;
+  agency_id: string;
+  role: "agency_admin";
+  created_at: string;
+};
+
 export type ClientRow = {
   id: string;
+  agency_id: string;
   user_id: string | null;
   business_name: string | null;
   domain: string | null;
@@ -205,6 +221,8 @@ type TableDef<Row, Insert = Partial<Row> & Record<string, unknown>> = {
 export type Database = {
   public: {
     Tables: {
+      agencies: TableDef<AgencyRow>;
+      agency_memberships: TableDef<AgencyMembershipRow>;
       clients: TableDef<ClientRow>;
       memberships: TableDef<MembershipRow>;
       contacts: TableDef<ContactRow>;

@@ -11,7 +11,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { client, role, user, isAdmin } = await requireMembership();
+  const { client, user, isAdmin, viewingAs } = await requireMembership();
   const cookieStore = await cookies();
   const initialCollapsed = cookieStore.get("sidebar_collapsed")?.value === "1";
 
@@ -24,7 +24,7 @@ export default async function AppLayout({
         isAdmin={isAdmin}
         initialCollapsed={initialCollapsed}
       >
-        {role === "sitewyre_admin" ? (
+        {viewingAs ? (
           <AdminBanner businessName={client?.business_name ?? null} />
         ) : null}
         {children}

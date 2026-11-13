@@ -23,6 +23,12 @@ vi.mock("@/lib/adapters", () => ({
 }));
 vi.mock("@/lib/auth/session", () => ({
   requireAdmin: async () => ({ supabase: fakeSupabase, user: { id: "admin1" } }),
+  requireAgencyOrSitewyreAdmin: async () => ({
+    supabase: fakeSupabase,
+    user: { id: "admin1" },
+    isSitewyreAdmin: true,
+    agencyId: null,
+  }),
   ADMIN_VIEW_COOKIE: "admin_view_client_id",
 }));
 
@@ -187,7 +193,7 @@ describe("setClientCallRouting", () => {
     const result = await setClientCallRouting(
       fd({ clientId: "client1", forwardPhone: "+15550009999", dialTimeoutSeconds: "90" }),
     );
-    expect(result.error).toMatch(/5-60/);
+    expect("error" in result && result.error).toMatch(/5-60/);
   });
 
   it("saves a normalized forward phone and the dial timeout", async () => {
