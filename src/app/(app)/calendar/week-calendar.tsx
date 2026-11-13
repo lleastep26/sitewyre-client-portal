@@ -30,6 +30,12 @@ export type MemberOption = {
   role: string;
 };
 
+export type ContactOption = {
+  id: string;
+  name: string;
+  phones: string[] | null;
+};
+
 const HOUR_START = 7;
 const HOUR_END = 19;
 const ROW_H = 44;
@@ -45,12 +51,14 @@ export function WeekCalendar({
   nextHref,
   appointments,
   members,
+  contacts,
 }: {
   weekStartIso: string;
   prevHref: string;
   nextHref: string;
   appointments: WeekAppt[];
   members: MemberOption[];
+  contacts: ContactOption[];
 }) {
   const weekStart = new Date(weekStartIso);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -257,6 +265,20 @@ export function WeekCalendar({
               </option>
             ))}
           </select>
+          {draft.mode === "create" ? (
+            <select
+              name="contact_id"
+              defaultValue=""
+              className="h-11 w-full rounded-md border border-charcoal/20 bg-white px-3 text-sm"
+            >
+              <option value="">No contact/lead linked</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.phones?.[0] ? `· ${c.phones[0]}` : ""}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {draft.mode === "edit" ? (
             <select
               name="status"

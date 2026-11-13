@@ -48,6 +48,13 @@ export default async function CalendarPage({
     .select("user_id, role")
     .eq("client_id", client.id);
 
+  const { data: contacts } = await supabase
+    .from("contacts")
+    .select("id, name, phones")
+    .eq("client_id", client.id)
+    .order("name")
+    .limit(200);
+
   return (
     <div className="space-y-4 px-4 pb-8">
       <header className="flex flex-wrap items-end justify-between gap-2">
@@ -95,6 +102,7 @@ export default async function CalendarPage({
           weekHref={`/calendar?view=week&week=${weekParam}`}
           appointments={appointments ?? []}
           members={members ?? []}
+          contacts={contacts ?? []}
         />
       ) : (
         <WeekCalendar
@@ -103,6 +111,7 @@ export default async function CalendarPage({
           nextHref={`/calendar?week=${nextWeek}`}
           appointments={appointments ?? []}
           members={members ?? []}
+          contacts={contacts ?? []}
         />
       )}
 

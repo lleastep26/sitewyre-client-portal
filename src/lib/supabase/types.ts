@@ -178,6 +178,21 @@ export type AppointmentRow = {
   end_at: string;
   status: string;
   title: string | null;
+  external_event_id: string | null;
+  external_calendar_provider: "google" | "outlook" | null;
+};
+
+export type CalendarConnectionRow = {
+  id: string;
+  client_id: string;
+  provider: "google" | "outlook";
+  access_token_encrypted: string;
+  refresh_token_encrypted: string;
+  expires_at: string;
+  calendar_id: string;
+  connected_by_user_id: string | null;
+  created_at: string;
+  updated_at: string | null;
 };
 
 export type JobRow = {
@@ -327,6 +342,7 @@ export type Database = {
         updated_at: string | null;
       }>;
       client_faqs: TableDef<ClientFaqRow>;
+      calendar_connections: TableDef<CalendarConnectionRow>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

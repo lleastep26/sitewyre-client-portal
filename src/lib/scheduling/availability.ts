@@ -45,7 +45,7 @@ export async function ensureDefaultAvailability(
     weekday,
     start_time: "09:00:00",
     end_time: "17:00:00",
-    buffer_minutes: 15,
+    buffer_minutes: 30,
     min_notice_hours: 2,
   }));
 

@@ -9,7 +9,7 @@ import {
   rescheduleAppointment,
   updateAppointmentStatus,
 } from "./actions";
-import type { MemberOption, WeekAppt } from "./week-calendar";
+import type { ContactOption, MemberOption, WeekAppt } from "./week-calendar";
 
 const HOUR_START = 7;
 const HOUR_END = 19;
@@ -25,6 +25,7 @@ export function DayCalendar({
   weekHref,
   appointments,
   members,
+  contacts,
 }: {
   dayIso: string;
   prevHref: string;
@@ -32,6 +33,7 @@ export function DayCalendar({
   weekHref: string;
   appointments: WeekAppt[];
   members: MemberOption[];
+  contacts: ContactOption[];
 }) {
   const day = parseISO(dayIso);
   const hours = Array.from(
@@ -56,6 +58,7 @@ export function DayCalendar({
     start_at: string;
     end_at: string;
     assignee_id: string;
+    contact_id: string;
     status: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +73,7 @@ export function DayCalendar({
       start_at: toLocalInput(start),
       end_at: toLocalInput(addMinutes(start, 60)),
       assignee_id: assigneeId === "unassigned" ? "" : assigneeId,
+      contact_id: "",
       status: "scheduled",
     });
     setError(null);
@@ -83,6 +87,7 @@ export function DayCalendar({
       start_at: toLocalInput(new Date(appt.start_at)),
       end_at: toLocalInput(new Date(appt.end_at)),
       assignee_id: appt.assignee_ids?.[0] ?? "",
+      contact_id: "",
       status: appt.status,
     });
     setError(null);
@@ -97,6 +102,7 @@ export function DayCalendar({
         fd.set("start_at", new Date(draft.start_at).toISOString());
         fd.set("end_at", new Date(draft.end_at).toISOString());
         if (draft.assignee_id) fd.set("assignee_id", draft.assignee_id);
+        if (draft.contact_id) fd.set("contact_id", draft.contact_id);
         const result = await createAppointment(fd);
         if (result?.error) {
           setError(result.error);
@@ -235,6 +241,20 @@ export function DayCalendar({
               </option>
             ))}
           </select>
+          {draft.mode === "create" ? (
+            <select
+              className="w-full rounded-md border border-charcoal/15 px-3 py-2 text-sm"
+              value={draft.contact_id}
+              onChange={(e) => setDraft({ ...draft, contact_id: e.target.value })}
+            >
+              <option value="">No contact/lead linked</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.phones?.[0] ? `· ${c.phones[0]}` : ""}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {draft.mode === "edit" ? (
             <div className="flex flex-wrap gap-2">
               <Button

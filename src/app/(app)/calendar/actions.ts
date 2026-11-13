@@ -7,8 +7,14 @@ import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { getSmsProvider } from "@/lib/adapters";
-import { setLeadLifecycleStatus } from "@/lib/leads/lifecycle";
+import { handleLeadBookedForContact, setLeadLifecycleStatus } from "@/lib/leads/lifecycle";
 import { applyTemplate } from "@/lib/automations";
+import { inngest } from "@/lib/inngest/client";
+import {
+  pushAppointmentCreated,
+  pushAppointmentDeleted,
+  pushAppointmentUpdated,
+} from "@/lib/scheduling/calendar-sync";
 
 export async function createAppointment(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
@@ -19,6 +25,7 @@ export async function createAppointment(formData: FormData) {
   const end = String(formData.get("end_at") ?? "");
   const assigneeId =
     String(formData.get("assignee_id") ?? "").trim() || user.id;
+  const contactId = String(formData.get("contact_id") ?? "").trim() || null;
   if (!start || !end) return { error: "Start and end required" };
 
   const startAt = new Date(start);
@@ -31,6 +38,7 @@ export async function createAppointment(formData: FormData) {
     .from("appointments")
     .insert({
       client_id: client.id,
+      contact_id: contactId,
       title,
       start_at: startAt.toISOString(),
       end_at: endAt.toISOString(),
@@ -41,6 +49,19 @@ export async function createAppointment(formData: FormData) {
     .single();
 
   if (error) return { error: error.message };
+
+  await handleLeadBookedForContact(
+    supabase,
+    { clientId: client.id, contactId, appointmentId: data.id },
+    (event) => inngest.send(event),
+  );
+
+  await pushAppointmentCreated(supabase, client.id, {
+    id: data.id,
+    title,
+    startAt,
+    endAt,
+  });
 
   await enqueueAppointmentSms({
     to: client.phone,
@@ -73,6 +94,13 @@ export async function rescheduleAppointment(input: {
   const { supabase, client } = await requireMembership();
   if (!client) return { error: "No client" };
 
+  const { data: existing } = await supabase
+    .from("appointments")
+    .select("title, external_event_id, external_calendar_provider")
+    .eq("id", input.id)
+    .eq("client_id", client.id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("appointments")
     .update({
@@ -87,6 +115,26 @@ export async function rescheduleAppointment(input: {
     .eq("id", input.id)
     .eq("client_id", client.id);
   if (error) return { error: error.message };
+
+  if (input.status === "cancelled") {
+    await pushAppointmentDeleted(
+      supabase,
+      client.id,
+      input.id,
+      existing?.external_event_id ?? null,
+      existing?.external_calendar_provider ?? null,
+    );
+  } else if (existing) {
+    await pushAppointmentUpdated(supabase, client.id, {
+      id: input.id,
+      title: input.title ?? existing.title ?? "Appointment",
+      startAt: new Date(input.start_at),
+      endAt: new Date(input.end_at),
+      externalEventId: existing.external_event_id,
+      externalProvider: existing.external_calendar_provider,
+    });
+  }
+
   revalidatePath("/calendar");
   return { ok: true };
 }
@@ -94,6 +142,17 @@ export async function rescheduleAppointment(input: {
 export async function updateAppointmentStatus(id: string, status: string) {
   const { supabase, client } = await requireMembership();
   if (!client) return { error: "No client" };
+
+  const { data: existing } =
+    status === "cancelled"
+      ? await supabase
+          .from("appointments")
+          .select("external_event_id, external_calendar_provider")
+          .eq("id", id)
+          .eq("client_id", client.id)
+          .maybeSingle()
+      : { data: null };
+
   const { error } = await supabase
     .from("appointments")
     .update({ status })
@@ -103,6 +162,16 @@ export async function updateAppointmentStatus(id: string, status: string) {
 
   if (status === "no_show") {
     await handleNoShow(supabase, client, id).catch(() => undefined);
+  }
+
+  if (status === "cancelled") {
+    await pushAppointmentDeleted(
+      supabase,
+      client.id,
+      id,
+      existing?.external_event_id ?? null,
+      existing?.external_calendar_provider ?? null,
+    );
   }
 
   revalidatePath("/calendar");

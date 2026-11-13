@@ -19,6 +19,7 @@ import { PhoneTab } from "./phone-tab";
 import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
 import { BusinessKnowledgeTab } from "./business-knowledge-tab";
+import { CalendarsTab } from "./calendars-tab";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
@@ -171,6 +172,12 @@ export default async function SettingsPage({
     .select("id, question, answer")
     .eq("client_id", client.id)
     .order("position", { ascending: true });
+
+  const { data: calendarConnectionRow } = await supabase
+    .from("calendar_connections")
+    .select("provider, created_at")
+    .eq("client_id", client.id)
+    .maybeSingle();
 
   const canEditBusinessProfile = role === "owner" || role === "sitewyre_admin";
 
@@ -541,6 +548,23 @@ export default async function SettingsPage({
     </Card>
   );
 
+  const calendarsTab = (
+    <Card>
+      <CardTitle>Calendars</CardTitle>
+      <div className="mt-3">
+        <CalendarsTab
+          canEdit={canEditBusinessProfile}
+          connection={
+            calendarConnectionRow
+              ? { provider: calendarConnectionRow.provider, createdAt: calendarConnectionRow.created_at }
+              : null
+          }
+          googleVerified={process.env.GOOGLE_APP_VERIFIED === "true"}
+        />
+      </div>
+    </Card>
+  );
+
   return (
     <div className="space-y-4 px-4 pb-10">
       <header>
@@ -556,6 +580,7 @@ export default async function SettingsPage({
           { id: "a2p", label: "Texting registration", content: a2pTab },
           { id: "email", label: "Email", content: emailTab },
           { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },
+          { id: "calendars", label: "Calendars", content: calendarsTab },
         ]}
       />
     </div>

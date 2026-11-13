@@ -10,6 +10,7 @@ import { sendPushToClient } from "@/lib/push/web-push";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { handleLeadBookedForContact } from "@/lib/leads/lifecycle";
 import { inngest } from "@/lib/inngest/client";
+import { getExternalBusyTimes, pushAppointmentCreated } from "@/lib/scheduling/calendar-sync";
 
 export async function bookAppointment(siteKey: string, formData: FormData) {
   const supabase = createAdminClient();
@@ -63,11 +64,13 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
     .lt("start_at", end.toISOString())
     .gt("end_at", start.toISOString());
 
+  const externalBusy = await getExternalBusyTimes(supabase, client.id, start, end);
+
   const free = isSlotAvailable({
     start,
     durationMinutes: duration,
     availability: availability ?? [],
-    busy: appointments ?? [],
+    busy: [...(appointments ?? []), ...externalBusy],
     timeZone: client.timezone ?? "America/Chicago",
   });
   if (!free) {
@@ -104,6 +107,12 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
       { clientId: client.id, contactId: contact.id, appointmentId: appointment.id },
       (event) => inngest.send(event),
     );
+    await pushAppointmentCreated(supabase, client.id, {
+      id: appointment.id,
+      title,
+      startAt: start,
+      endAt: end,
+    });
   }
 
   await supabase.from("jobs").insert({

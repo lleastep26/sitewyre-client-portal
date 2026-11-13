@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { json, options } from "@/lib/http/cors";
 import { generateSlots, wallTimeToUtc } from "@/lib/scheduling/slots";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
+import { getExternalBusyTimes } from "@/lib/scheduling/calendar-sync";
 
 export function OPTIONS() {
   return options();
@@ -80,12 +81,14 @@ export async function GET(request: Request) {
     .lt("start_at", rangeEnd.toISOString())
     .gt("end_at", rangeStart.toISOString());
 
+  const externalBusy = await getExternalBusyTimes(supabase, client.id, rangeStart, rangeEnd);
+
   const slots = generateSlots({
     dateFrom,
     dateTo,
     durationMinutes: service.duration_minutes,
     availability,
-    busy: appointments ?? [],
+    busy: [...(appointments ?? []), ...externalBusy],
     timeZone,
   });
 
