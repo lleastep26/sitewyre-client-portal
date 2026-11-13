@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { buildCampaignDescription } from "./sample-messages";
 
 /**
  * Policy SIDs per Twilio's documented ISV onboarding API walkthroughs —
@@ -371,9 +372,7 @@ export async function ensureCampaign(
     const campaign = await client.messaging.v1.services(next.messagingServiceSid!).usAppToPerson.create({
       brandRegistrationSid: next.brandSid!,
       usAppToPersonUsecase: info.registrationType === "sole_prop" ? "SOLE_PROPRIETOR" : "MIXED",
-      description:
-        `${info.legalBusinessName} sends appointment confirmations, invoice/quote follow-ups, ` +
-        `and replies to inbound leads for their home service business.`,
+      description: buildCampaignDescription(info.legalBusinessName),
       messageSamples: sampleMessages,
       messageFlow,
       hasEmbeddedLinks: true,
