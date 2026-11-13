@@ -5,6 +5,7 @@ import Link from "next/link";
 import { moveLead } from "@/app/(app)/leads/actions";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { groupLeadsByStage } from "@/lib/leads/board-columns";
 
 type Stage = {
   id: string;
@@ -42,14 +43,7 @@ export function LeadsBoard({
   const [dragLead, setDragLead] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const byStage = useMemo(() => {
-    const map = new Map<string, Lead[]>();
-    for (const s of stages) map.set(s.id, []);
-    for (const l of leads) {
-      if (l.stage_id && map.has(l.stage_id)) map.get(l.stage_id)!.push(l);
-    }
-    return map;
-  }, [stages, leads]);
+  const byStage = useMemo(() => groupLeadsByStage(stages, leads), [stages, leads]);
 
   return (
     <div className="space-y-3">
