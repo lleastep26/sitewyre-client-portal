@@ -41,3 +41,30 @@ export function formatWaitingLabel(minutes: number): string {
   const rem = minutes % 60;
   return rem ? `${hours}h ${rem}m waiting` : `${hours}h waiting`;
 }
+
+export type SlaNudgeOutcome = {
+  status: "sent" | "skipped";
+  sms: "sent" | "no_owner_phone";
+  push: "sent" | "no_push_key" | "no_push_devices";
+  /** Set only when nothing went out. */
+  reason?: string;
+};
+
+/**
+ * What actually happened to the owner nudge, for the log. It only counts
+ * as sent if a text went to the owner's mobile or a push reached at least
+ * one device; otherwise it is logged as skipped with the reason.
+ */
+export function slaNudgeOutcome(input: {
+  ownerPhone: string | null | undefined;
+  push: { skipped?: boolean; sent?: number } | null | undefined;
+}): SlaNudgeOutcome {
+  const sms = input.ownerPhone ? "sent" : "no_owner_phone";
+  const push = input.push?.skipped
+    ? "no_push_key"
+    : (input.push?.sent ?? 0) > 0
+      ? "sent"
+      : "no_push_devices";
+  if (sms === "sent" || push === "sent") return { status: "sent", sms, push };
+  return { status: "skipped", sms, push, reason: `${sms}_and_${push}` };
+}

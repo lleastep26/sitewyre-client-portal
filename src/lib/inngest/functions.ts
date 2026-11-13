@@ -13,6 +13,7 @@ import { sendPushToClient } from "@/lib/push/web-push";
 import {
   SPEED_TO_LEAD_SLA_SLEEP,
   shouldNudgeOwnerForSla,
+  slaNudgeOutcome,
 } from "@/lib/leads/speed-to-lead";
 import { isOptedOut, logSkippedOptOut } from "@/lib/funnels/opt-out";
 import { hasRecentSend } from "@/lib/funnels/dedupe";
@@ -357,7 +358,7 @@ export const leadSlaNudge = inngest.createFunction(
       );
     }
 
-    await step.run("push-owner-sla", async () =>
+    const push = await step.run("push-owner-sla", async () =>
       sendPushToClient(clientId, {
         title: `Still needs reply — ${client.business_name ?? "Sitewyre"}`,
         body: `${firstName} · ${leadPhone}`,
@@ -365,15 +366,24 @@ export const leadSlaNudge = inngest.createFunction(
       }),
     );
 
+    // Only "sent" if the nudge actually went somewhere.
+    const outcome = slaNudgeOutcome({ ownerPhone: client.phone, push });
     await step.run("log-sla-nudge", async () => {
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "lead_sla_nudge",
-        status: "sent",
-        log: { leadId, phone: leadPhone },
+        status: outcome.status,
+        log: {
+          leadId,
+          phone: leadPhone,
+          sms: outcome.sms,
+          push: outcome.push,
+          ...(outcome.reason ? { reason: outcome.reason } : {}),
+        },
       });
     });
 
+    if (outcome.status === "skipped") return { skipped: true, reason: outcome.reason };
     return { ok: true };
   },
 );

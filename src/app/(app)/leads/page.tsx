@@ -163,6 +163,13 @@ function blockReasonLabel(reason: string): string {
   return reason.replaceAll("_", " ");
 }
 
+function ownerAlertReasonLabel(reason: string): string {
+  const push = reason.endsWith("no_push_devices")
+    ? "no device has push alerts turned on"
+    : "push alerts aren't set up";
+  return `no owner mobile number is saved in Business Profile and ${push}`;
+}
+
 /** Extra detail for timeline entries that carry it: why a text was not
  * sent, and the AI receptionist's call summary and recording link. */
 function TimelineDetail({ log, status }: { log: unknown; status: string }) {
@@ -177,16 +184,27 @@ function TimelineDetail({ log, status }: { log: unknown; status: string }) {
     typeof entry.recordingUrl === "string" && entry.recordingUrl.startsWith("https://")
       ? entry.recordingUrl
       : null;
+  // The owner nudge logs its own outcome: it has a line here only when
+  // nothing reached the owner at all.
+  const ownerAlert =
+    typeof entry.reason === "string" && entry.reason.startsWith("no_owner_phone")
+      ? status === "skipped"
+        ? ownerAlertReasonLabel(entry.reason)
+        : null
+      : undefined;
   const blocked =
-    typeof entry.sms === "string" && entry.sms !== "sent"
-      ? entry.sms
-      : status === "skipped" && typeof entry.reason === "string"
-        ? entry.reason
-        : null;
-  if (!summary && !recordingUrl && !blocked) return null;
+    ownerAlert !== undefined || entry.sms === "no_owner_phone"
+      ? null
+      : typeof entry.sms === "string" && entry.sms !== "sent"
+        ? entry.sms
+        : status === "skipped" && typeof entry.reason === "string"
+          ? entry.reason
+          : null;
+  if (!summary && !recordingUrl && !blocked && !ownerAlert) return null;
   return (
     <span className="mt-0.5 block text-charcoal/60">
       {summary}
+      {ownerAlert ? `Owner alert not sent: ${ownerAlertReasonLabel(String(entry.reason))}.` : null}
       {blocked ? `Text not sent: ${blockReasonLabel(blocked)}.` : null}
       {recordingUrl ? (
         <>

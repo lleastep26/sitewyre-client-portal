@@ -6,6 +6,7 @@ import {
   isPastSpeedToLeadSla,
   minutesWaiting,
   shouldNudgeOwnerForSla,
+  slaNudgeOutcome,
   slaCutoffIso,
 } from "@/lib/leads/speed-to-lead";
 import { AUTOMATION_DEFS } from "@/lib/automations";
@@ -81,5 +82,40 @@ describe("speed-to-lead SLA helpers", () => {
     const def = AUTOMATION_DEFS.find((d) => d.key === "lead_sla_nudge");
     expect(def?.defaultTemplate).toContain("{{first_name}}");
     expect(def?.defaultTemplate).toContain("{{phone}}");
+  });
+});
+
+describe("slaNudgeOutcome", () => {
+  it("is skipped, with the reason, when there is no owner phone and no push key", () => {
+    expect(slaNudgeOutcome({ ownerPhone: null, push: { skipped: true } })).toEqual({
+      status: "skipped",
+      sms: "no_owner_phone",
+      push: "no_push_key",
+      reason: "no_owner_phone_and_no_push_key",
+    });
+  });
+
+  it("is skipped when push is set up but no device is subscribed", () => {
+    expect(slaNudgeOutcome({ ownerPhone: "", push: { sent: 0 } })).toEqual({
+      status: "skipped",
+      sms: "no_owner_phone",
+      push: "no_push_devices",
+      reason: "no_owner_phone_and_no_push_devices",
+    });
+  });
+
+  it("is sent when the owner has a mobile number", () => {
+    expect(slaNudgeOutcome({ ownerPhone: "+14055550100", push: { skipped: true } })).toEqual({
+      status: "sent",
+      sms: "sent",
+      push: "no_push_key",
+    });
+  });
+
+  it("is sent when a push reached a device", () => {
+    expect(slaNudgeOutcome({ ownerPhone: null, push: { sent: 2 } })).toMatchObject({
+      status: "sent",
+      push: "sent",
+    });
   });
 });
