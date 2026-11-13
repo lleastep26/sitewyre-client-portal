@@ -74,8 +74,15 @@ describe("POST /api/retell/functions/flag-emergency", () => {
     expect(createOutboundCall).toHaveBeenCalledTimes(1);
     const callArgs = createOutboundCall.mock.calls[0][0];
     expect(callArgs.to).toBe("+15558880000");
-    expect(callArgs.twiml).toContain("<Conference");
-    expect(callArgs.statusCallback).toContain("originalCallSid=CAcaller");
+    // The owner's leg starts with the press-1 prompt, not the conference:
+    // a voicemail that answers can never pull the caller off the AI.
+    expect(callArgs.twiml).toContain("<Say>Emergency call for Acme, press 1 to accept.</Say>");
+    expect(callArgs.twiml).toContain(
+      "/api/retell/emergency-accept?originalCallSid=CAcaller&amp;conference=emergency-callX",
+    );
+    expect(callArgs.twiml).not.toContain("<Conference");
+    expect(callArgs.twiml.indexOf("</Gather>")).toBeLessThan(callArgs.twiml.indexOf("<Hangup/>"));
+    expect(callArgs.statusCallback).toBeUndefined();
 
     expect(json.transfer_attempted).toBe(true);
     expect(json.instructions).toContain("911");

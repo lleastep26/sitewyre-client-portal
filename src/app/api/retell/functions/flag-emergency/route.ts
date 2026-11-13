@@ -9,6 +9,7 @@ import { getSmsProvider, getVoiceProvider } from "@/lib/adapters";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { normalizePhone } from "@/lib/utils";
 import { getAppUrl } from "@/lib/supabase/env";
+import { whisperTwiml } from "@/lib/twilio/call-screen";
 
 export async function POST(request: Request) {
   const raw = await readVerifiedRetellBody(request);
@@ -42,22 +43,21 @@ export async function POST(request: Request) {
       .catch(() => undefined);
   }
 
-  // 2. One extra ring to the owner. If they answer, the TwiML joins a
-  // conference; the emergency-transfer-status webhook only redirects the
-  // caller's still-live call into that same conference once this leg is
-  // actually answered — if it's never answered, the caller is never
-  // pulled off the AI, matching "no repeat rings" exactly.
+  // 2. One extra ring to the owner. Whoever answers hears "Emergency call
+  // for [business], press 1 to accept." Only on 1 does the
+  // emergency-accept route put the owner in a conference and pull the
+  // caller's still-live call into it. If the owner doesn't pick up, or
+  // their voicemail does, nobody presses 1, that leg is hung up and the
+  // caller is never pulled off the AI — matching "no repeat rings" exactly.
   let transferAttempted = false;
   if (client.forward_to_phone && client.twilio_phone_number && originalCallSid) {
     const conferenceName = `emergency-${body.call.call_id}`;
-    const ownerTwiml = `<Response><Dial><Conference endConferenceOnExit="true">${conferenceName}</Conference></Dial></Response>`;
-    const statusCallback = `${getAppUrl()}/api/retell/emergency-transfer-status?originalCallSid=${encodeURIComponent(originalCallSid)}&conference=${encodeURIComponent(conferenceName)}`;
+    const acceptUrl = `${getAppUrl()}/api/retell/emergency-accept?originalCallSid=${encodeURIComponent(originalCallSid)}&conference=${encodeURIComponent(conferenceName)}`;
     try {
       await getVoiceProvider().createOutboundCall({
         to: normalizePhone(client.forward_to_phone),
         from: client.twilio_phone_number,
-        twiml: ownerTwiml,
-        statusCallback,
+        twiml: whisperTwiml(client.business_name, acceptUrl, "Emergency call"),
       });
       transferAttempted = true;
     } catch {

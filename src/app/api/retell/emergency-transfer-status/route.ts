@@ -8,10 +8,14 @@ function xml(body: string) {
 }
 
 /**
+ * No longer used by new calls: the emergency transfer now asks the owner
+ * to press 1 (see ../emergency-accept), because "answered" here could be
+ * the owner's voicemail. Kept only so an emergency call that was already
+ * in flight when that change deployed still completes; safe to delete.
+ *
  * Status callback for the owner's extra-ring emergency call
- * (flag-emergency route). Only on "in-progress" (owner actually answered)
- * do we pull the caller's still-live call into the conference — if the
- * owner never picks up, this never fires and the caller stays on the AI.
+ * (flag-emergency route). On "in-progress" it pulls the caller's
+ * still-live call into the conference.
  */
 export async function POST(request: Request) {
   const url = new URL(request.url);
