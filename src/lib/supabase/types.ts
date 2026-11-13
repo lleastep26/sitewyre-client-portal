@@ -77,8 +77,23 @@ export type ClientRow = {
   ai_text_assistant_enabled: boolean;
   ai_text_replies_used_this_month: number;
   ai_text_replies_allowance: number;
+  chat_widget_enabled: boolean;
+  ai_chat_replies_used_this_month: number;
   created_at: string;
   updated_at: string | null;
+};
+
+export type ChatSessionRow = {
+  id: string;
+  client_id: string;
+  contact_id: string;
+  lead_id: string | null;
+  token_hash: string;
+  ip_hash: string | null;
+  visitor_message_count: number;
+  last_message_at: string | null;
+  owner_alerted_at: string | null;
+  created_at: string;
 };
 
 export type AiTextUsageHistoryRow = {
@@ -180,7 +195,7 @@ export type MessageRow = {
   id: string;
   client_id: string;
   contact_id: string;
-  channel: "sms" | "email" | "call" | "note";
+  channel: "sms" | "email" | "call" | "note" | "chat";
   direction: "inbound" | "outbound" | "internal";
   body: string | null;
   media: unknown;
@@ -378,6 +393,7 @@ export type Database = {
       calendar_connections: TableDef<CalendarConnectionRow>;
       retell_usage_history: TableDef<RetellUsageHistoryRow>;
       ai_text_usage_history: TableDef<AiTextUsageHistoryRow>;
+      chat_sessions: TableDef<ChatSessionRow>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

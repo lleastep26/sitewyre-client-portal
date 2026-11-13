@@ -1,11 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findOrCreateContact } from "@/lib/crm/contacts";
 import { resolveClient } from "@/lib/crm/resolve-client";
 import { leadIngestSchema } from "@/lib/validation/leads";
 import { json, options } from "@/lib/http/cors";
-import { inngest } from "@/lib/inngest/client";
+import { ingestLead } from "@/lib/leads/ingest";
 import { verifyTurnstileToken } from "@/lib/security/turnstile";
-import { normalizePhone } from "@/lib/utils";
 
 export function OPTIONS() {
   return options();
@@ -43,71 +41,18 @@ export async function POST(request: Request) {
     const client = await resolveClient(supabase, input);
     if (!client) return json({ error: "Unknown client" }, 400);
 
-    const contact = await findOrCreateContact(supabase, {
-      clientId: client.id,
+    const result = await ingestLead(supabase, client, {
       name: input.name,
       phone: input.phone,
       email: input.email || null,
+      message: input.message,
       source: input.source ?? "website_form",
+      service: input.service ?? null,
       smsOptIn: input.sms_opt_in ?? true,
     });
+    if ("error" in result) return json({ error: result.error }, 500);
 
-    let stageId: string | null = null;
-    const { data: newStage } = await supabase
-      .from("pipeline_stages")
-      .select("id")
-      .eq("client_id", client.id)
-      .eq("name", "New")
-      .maybeSingle();
-    stageId = newStage?.id ?? null;
-
-    const { data: lead, error } = await supabase
-      .from("leads")
-      .insert({
-        client_id: client.id,
-        contact_id: contact.id,
-        stage_id: stageId,
-        name: input.name,
-        phone: normalizePhone(input.phone) || input.phone,
-        email: input.email || null,
-        message: input.message,
-        source: input.source ?? "website_form",
-        service: input.service ?? null,
-        last_activity_at: new Date().toISOString(),
-      })
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("Failed to store lead", error);
-      return json({ error: "Unable to save lead" }, 500);
-    }
-
-    await supabase.from("activities").insert({
-      client_id: client.id,
-      contact_id: contact.id,
-      type: "lead_created",
-      payload: { lead_id: lead.id, source: lead.source, message: lead.message },
-      occurred_at: new Date().toISOString(),
-    });
-
-    try {
-      await inngest.send({
-        name: "portal/lead.created",
-        data: {
-          clientId: client.id,
-          leadId: lead.id,
-          phone: lead.phone,
-          email: lead.email,
-          name: lead.name,
-        },
-      });
-    } catch (err) {
-      // Lead is already stored; automations can retry once INNGEST_EVENT_KEY is set.
-      console.warn("Inngest lead.created not sent", err);
-    }
-
-    return json({ ok: true, lead_id: lead.id, contact_id: contact.id });
+    return json({ ok: true, lead_id: result.leadId, contact_id: result.contactId });
   } catch (error) {
     console.error("Failed to store lead", error);
     return json({ error: "Unable to save lead" }, 500);

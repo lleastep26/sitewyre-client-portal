@@ -22,6 +22,8 @@ import { BusinessKnowledgeTab } from "./business-knowledge-tab";
 import { CalendarsTab } from "./calendars-tab";
 import { AiReceptionistTab } from "./ai-receptionist-tab";
 import { AiTextAssistantCard } from "./ai-text-assistant-card";
+import { ChatWidgetCard } from "./chat-widget-card";
+import { getAppUrl } from "@/lib/supabase/env";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
@@ -574,6 +576,22 @@ export default async function SettingsPage({
             enabled={client.ai_text_assistant_enabled}
             repliesUsedThisMonth={client.ai_text_replies_used_this_month}
             repliesAllowance={client.ai_text_replies_allowance}
+          />
+        </div>
+      </Card>
+      <Card>
+        <CardTitle>Website chat widget</CardTitle>
+        <div className="mt-3">
+          <ChatWidgetCard
+            canEdit={canEditBusinessProfile}
+            enabled={client.chat_widget_enabled}
+            snippet={
+              client.site_key
+                ? `<script src="${getAppUrl()}/widget.js" data-site-key="${client.site_key}" async></script>`
+                : null
+            }
+            allowedSite={client.domain}
+            repliesUsedThisMonth={client.ai_chat_replies_used_this_month}
           />
         </div>
       </Card>

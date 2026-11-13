@@ -3,6 +3,7 @@ import {
   buildBusinessKnowledgeSummary,
   buildRetellBeginMessage,
   buildRetellGeneralPrompt,
+  buildChatWidgetPrompt,
   buildTextAssistantPrompt,
 } from "@/lib/business-knowledge/summary";
 
@@ -150,5 +151,29 @@ describe("buildTextAssistantPrompt", () => {
   it("is identical between calls, so it can be prompt-cached", () => {
     expect(buildTextAssistantPrompt(input)).toBe(buildTextAssistantPrompt(input));
     expect(buildTextAssistantPrompt(input)).not.toMatch(/\b20\d\d\b/);
+  });
+});
+
+describe("buildChatWidgetPrompt", () => {
+  it("answers from the knowledge only, with no prices, promises or booking tools", () => {
+    const prompt = buildChatWidgetPrompt({
+      client: {
+        business_name: "Acme Plumbing",
+        trade: "plumbing",
+        service_area: "Austin, TX",
+        services_offered: null,
+        after_hours_rules: null,
+        ai_never_say: null,
+      },
+      bookableServices: [],
+      availability: [],
+      faqs: [{ question: "Do you offer warranties?", answer: "Yes, one year." }],
+    });
+    expect(prompt).toContain("Business: Acme Plumbing");
+    expect(prompt).toContain("Q: Do you offer warranties?");
+    expect(prompt).toMatch(/Never state or estimate a price/);
+    expect(prompt).toMatch(/You can't book appointments/);
+    expect(prompt).toContain("team_will_follow_up");
+    expect(prompt).not.toContain("check_availability");
   });
 });

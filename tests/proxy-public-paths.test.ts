@@ -13,6 +13,8 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/pay/token123")).toBe(true);
     expect(isPublicPath("/manifest.webmanifest")).toBe(true);
     expect(isPublicPath("/sw.js")).toBe(true);
+    expect(isPublicPath("/widget.js")).toBe(true);
+    expect(isPublicPath("/api/public/chat/start")).toBe(true);
   });
 
   it("does not treat a normal authenticated app route as public", () => {

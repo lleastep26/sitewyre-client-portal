@@ -7,6 +7,12 @@ import Anthropic from "@anthropic-ai/sdk";
  */
 export const AI_TEXT_MODEL = process.env.AI_TEXT_MODEL || "claude-sonnet-5-5";
 
+/**
+ * The website chat widget's model — its own setting, separate from the
+ * text assistant's. Change the default here, or set AI_CHAT_MODEL.
+ */
+export const AI_CHAT_MODEL = process.env.AI_CHAT_MODEL || "claude-sonnet-5-5";
+
 /** Models that accept the server-side refusal fallback parameter. */
 export function supportsServerSideFallback(model: string): boolean {
   return /^claude-(sonnet-5-5|opus-5|fable-5)/.test(model);

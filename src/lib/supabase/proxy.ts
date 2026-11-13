@@ -10,7 +10,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/pay/") ||
     pathname.startsWith("/r/") ||
     pathname === "/manifest.webmanifest" ||
-    pathname === "/sw.js"
+    pathname === "/sw.js" ||
+    pathname === "/widget.js"
   );
 }
 

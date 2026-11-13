@@ -17,7 +17,7 @@ export default async function AdminPage() {
   let query = supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_assistant_enabled, ai_text_replies_used_this_month, ai_text_replies_allowance",
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_assistant_enabled, ai_text_replies_used_this_month, ai_text_replies_allowance, chat_widget_enabled, ai_chat_replies_used_this_month",
     )
     .order("business_name", { ascending: true });
   if (agencyId) query = query.eq("agency_id", agencyId);
@@ -123,6 +123,11 @@ export default async function AdminPage() {
                   {c.ai_text_replies_used_this_month > c.ai_text_replies_allowance
                     ? " — over allowance, bill manually"
                     : ""}
+                </p>
+              ) : null}
+              {c.chat_widget_enabled ? (
+                <p className="mt-1 text-xs text-charcoal/50">
+                  Website chat: {c.ai_chat_replies_used_this_month} AI replies this month
                 </p>
               ) : null}
               {isSitewyreAdmin ? (

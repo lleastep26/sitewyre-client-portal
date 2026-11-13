@@ -1234,9 +1234,11 @@ export const retellMinutesMonthlyReset = inngest.createFunction(
           )
           .select("id");
         if (repliesArchived?.length) {
+          // The chat widget's counter has no allowance or history; it just
+          // starts each month at zero alongside the text replies.
           await supabase
             .from("clients")
-            .update({ ai_text_replies_used_this_month: 0 })
+            .update({ ai_text_replies_used_this_month: 0, ai_chat_replies_used_this_month: 0 })
             .eq("id", client.id);
         }
       }
