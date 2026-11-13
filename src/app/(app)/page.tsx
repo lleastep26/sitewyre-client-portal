@@ -10,6 +10,7 @@ import {
   minutesWaiting,
   slaCutoffIso,
 } from "@/lib/leads/speed-to-lead";
+import { wallTimeToUtc } from "@/lib/scheduling/slots";
 
 export default async function HomePage() {
   const { supabase, client, role } = await requireMembership();
@@ -23,8 +24,15 @@ export default async function HomePage() {
     );
   }
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  // "Today" is the business's own day, not the server's (UTC) day.
+  const timeZone = client.timezone ?? "America/Chicago";
+  const todayYmd = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const startOfDay = wallTimeToUtc(todayYmd, 0, timeZone);
   const staleBefore = new Date(startOfDay);
   staleBefore.setDate(staleBefore.getDate() - 2);
   const slaCutoff = slaCutoffIso();
