@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatSessionRow, ClientRow, Database } from "@/lib/supabase/types";
 import { getSmsProvider } from "@/lib/adapters";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { resolveOwnerAlertFrom } from "@/lib/a2p/sending";
 import { loadBusinessKnowledgeParts } from "@/lib/business-knowledge/load";
 import {
   buildBusinessKnowledgeSummary,
@@ -148,10 +148,9 @@ export async function answerChatMessage(
       .update({ owner_alerted_at: now.toISOString() })
       .eq("id", session.id);
     const alert = `${opts.visitorName} is chatting on your website and needs you: "${opts.visitorMessage.slice(0, 100)}" — see your portal inbox.`;
-    const from = resolveSmsFrom(client);
-    if (client.phone && from) {
+    if (client.phone) {
       await getSmsProvider()
-        .send({ to: normalizePhone(client.phone), from, body: alert })
+        .send({ to: normalizePhone(client.phone), from: resolveOwnerAlertFrom(client), body: alert })
         .catch(() => undefined);
     }
     await sendPushToClient(client.id, {

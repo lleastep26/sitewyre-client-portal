@@ -3,18 +3,23 @@ import { sign } from "retell-sdk";
 
 let fakeSupabase: unknown;
 let clientRow: Record<string, unknown> | null;
-let insertedLead: Record<string, unknown> | null;
-let updatedLead: Record<string, unknown> | null;
-let existingOpenLead: { id: string; name: string; contact_id: string | null } | null;
+let contactPatch: Record<string, unknown> | null;
 
 const findOrCreateContact = vi.fn();
-const findOpenLeadForPhone = vi.fn();
-const inngestSend = vi.fn();
+const findContactByPhone = vi.fn();
+const findLeadForCall = vi.fn();
+const touchCallLead = vi.fn();
+const createCallLead = vi.fn();
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => fakeSupabase }));
-vi.mock("@/lib/crm/contacts", () => ({ findOrCreateContact }));
-vi.mock("@/lib/leads/lifecycle", () => ({ findOpenLeadForPhone }));
-vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSend } }));
+vi.mock("@/lib/crm/contacts", () => ({ findOrCreateContact, findContactByPhone }));
+vi.mock("@/lib/retell/call-lead", () => ({
+  findLeadForCall,
+  touchCallLead,
+  createCallLead,
+  isFromThisCall: (createdAt: string, _now: Date, start: Date | null) =>
+    !!start && Date.parse(createdAt) >= start.getTime(),
+}));
 
 function buildSupabase() {
   return {
@@ -22,22 +27,11 @@ function buildSupabase() {
       if (table === "clients") {
         return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: clientRow }) }) }) };
       }
-      if (table === "pipeline_stages") {
-        return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "stage1" } }) }) }) }) };
-      }
-      if (table === "leads") {
+      if (table === "contacts") {
         return {
-          insert: (row: Record<string, unknown>) => ({
-            select: () => ({
-              single: async () => {
-                insertedLead = row;
-                return { data: { id: "lead1" }, error: null };
-              },
-            }),
-          }),
           update: (patch: Record<string, unknown>) => ({
             eq: async () => {
-              updatedLead = patch;
+              contactPatch = patch;
               return { error: null };
             },
           }),
@@ -61,17 +55,30 @@ async function callRoute(body: unknown) {
   );
 }
 
+const CALL_START = Date.parse("2026-11-13T21:41:00.000Z");
+const call = (metadata: Record<string, unknown> = { client_id: "client1", caller_number: "+15551234567" }) => ({
+  call_id: "c1",
+  agent_id: "a1",
+  start_timestamp: CALL_START,
+  metadata,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("RETELL_API_KEY", "test-key");
   fakeSupabase = buildSupabase();
-  insertedLead = null;
-  updatedLead = null;
-  existingOpenLead = null;
+  contactPatch = null;
   clientRow = { id: "client1", user_id: "user1" };
-  findOrCreateContact.mockResolvedValue({ id: "contact1" });
-  findOpenLeadForPhone.mockImplementation(async () => existingOpenLead);
-  inngestSend.mockResolvedValue(undefined);
+  findOrCreateContact.mockResolvedValue({
+    id: "contact1",
+    name: "Jane Doe",
+    phones: ["+15551234567"],
+    source: "website",
+    created_at: "2026-10-01T00:00:00.000Z",
+  });
+  findContactByPhone.mockResolvedValue(null);
+  findLeadForCall.mockResolvedValue(null);
+  createCallLead.mockResolvedValue({ lead: { id: "lead1", name: "Jane Doe", contact_id: "contact1" }, error: null });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -82,41 +89,107 @@ describe("POST /api/retell/functions/upsert-lead", () => {
     const res = await callRoute({
       name: "create_or_update_lead",
       args: { caller_phone: "+15551234567" },
-      call: { call_id: "c1", agent_id: "a1", metadata: { client_id: "client1" } },
+      call: call(),
     });
     const json = await res.json();
     expect(json.error).toContain("caller's name");
-    expect(insertedLead).toBeNull();
+    expect(createCallLead).not.toHaveBeenCalled();
   });
 
-  it("creates a new lead when there's no existing open one for this phone", async () => {
+  it("creates a new lead when the caller has no live lead", async () => {
     const res = await callRoute({
       name: "create_or_update_lead",
-      args: { caller_name: "Jane Doe", caller_phone: "+15551234567", reason: "Leaky faucet" },
-      call: { call_id: "c1", agent_id: "a1", metadata: { client_id: "client1" } },
+      args: { caller_name: "Jane Doe", reason: "Leaky faucet" },
+      call: call(),
     });
     const json = await res.json();
-    expect(json.ok).toBe(true);
-    expect(insertedLead).toMatchObject({
-      name: "Jane Doe",
-      message: "Leaky faucet",
-      source: "ai_receptionist",
-    });
-    expect(inngestSend).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "portal/lead.created" }),
+    expect(json).toEqual({ ok: true, lead_id: "lead1" });
+    expect(findLeadForCall).toHaveBeenCalledWith(
+      fakeSupabase,
+      "client1",
+      "+15551234567",
+      expect.objectContaining({ callStartedAt: new Date(CALL_START), contactId: "contact1" }),
     );
+    expect(createCallLead).toHaveBeenCalledWith(
+      fakeSupabase,
+      expect.objectContaining({
+        contactId: "contact1",
+        name: "Jane Doe",
+        phone: "+15551234567",
+        message: "Leaky faucet",
+      }),
+    );
+    expect(contactPatch).toBeNull();
   });
 
-  it("updates the existing open lead for this phone instead of duplicating", async () => {
-    existingOpenLead = { id: "lead_existing", name: "Jane Doe", contact_id: "contact1" };
+  it("updates the caller's live lead instead of duplicating", async () => {
+    const existing = { id: "lead_existing", name: "Jane Doe", contact_id: "contact1" };
+    findLeadForCall.mockResolvedValue(existing);
     const res = await callRoute({
       name: "create_or_update_lead",
-      args: { caller_name: "Jane Doe", caller_phone: "+15551234567", reason: "Now says it's urgent" },
-      call: { call_id: "c1", agent_id: "a1", metadata: { client_id: "client1" } },
+      args: { caller_name: "Jane Doe", reason: "Now says it's urgent" },
+      call: call(),
     });
     const json = await res.json();
     expect(json).toEqual({ ok: true, lead_id: "lead_existing" });
-    expect(updatedLead).toMatchObject({ message: "Now says it's urgent" });
-    expect(insertedLead).toBeNull();
+    expect(touchCallLead).toHaveBeenCalledWith(
+      fakeSupabase,
+      "client1",
+      existing,
+      expect.objectContaining({ name: "Jane Doe", message: "Now says it's urgent" }),
+    );
+    expect(createCallLead).not.toHaveBeenCalled();
+  });
+
+  it("renames a contact made on this call when the caller corrects their name", async () => {
+    findOrCreateContact.mockResolvedValue({
+      id: "contact1",
+      name: "Play",
+      phones: ["+15551234567"],
+      source: "ai_receptionist",
+      created_at: "2026-11-13T21:41:30.000Z",
+    });
+    await callRoute({
+      name: "create_or_update_lead",
+      args: { caller_name: "Clay", reason: "Standard clean" },
+      call: call(),
+    });
+    expect(contactPatch).toEqual({ name: "Clay" });
+  });
+
+  it("never renames an existing customer's contact", async () => {
+    await callRoute({
+      name: "create_or_update_lead",
+      args: { caller_name: "Jayne", reason: "Standard clean" },
+      call: call(),
+    });
+    expect(contactPatch).toBeNull();
+  });
+
+  it("keeps the caller's own number as their identity and saves a different callback number", async () => {
+    await callRoute({
+      name: "create_or_update_lead",
+      args: { caller_name: "Jane Doe", caller_phone: "555-000-1111", reason: "Call my cell" },
+      call: call(),
+    });
+    expect(findOrCreateContact).toHaveBeenCalledWith(
+      fakeSupabase,
+      expect.objectContaining({ phone: "+15551234567" }),
+    );
+    expect(contactPatch).toEqual({ phones: ["+15551234567", "+15550001111"] });
+    expect(createCallLead).toHaveBeenCalledWith(
+      fakeSupabase,
+      expect.objectContaining({ phone: "+15550001111", contactId: "contact1" }),
+    );
+  });
+
+  it("reports a lead that couldn't be saved", async () => {
+    createCallLead.mockResolvedValue({ lead: null, error: "insert failed" });
+    const res = await callRoute({
+      name: "create_or_update_lead",
+      args: { caller_name: "Jane Doe" },
+      call: call(),
+    });
+    expect(await res.json()).toEqual({ error: "insert failed" });
   });
 });

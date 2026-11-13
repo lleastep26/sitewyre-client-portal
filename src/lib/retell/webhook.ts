@@ -6,6 +6,7 @@ export type RetellFunctionCallBody = {
   call: {
     call_id: string;
     agent_id: string;
+    start_timestamp?: number;
     metadata?: Record<string, unknown>;
   };
 };

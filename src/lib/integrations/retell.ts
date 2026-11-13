@@ -131,6 +131,14 @@ export async function updateRetellAgentPrompt(
   });
 }
 
+/** The caller's number in a form the agent can read aloud ("405-555-0123"),
+ * or "unknown" when caller ID is withheld or isn't a US number. */
+export function spokenCallerNumber(fromNumber: string): string {
+  const digits = fromNumber.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  if (digits.length !== 10) return "unknown";
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export async function registerRetellPhoneCall(opts: {
   agentId: string;
   fromNumber: string;
@@ -144,6 +152,8 @@ export async function registerRetellPhoneCall(opts: {
     from_number: opts.fromNumber,
     to_number: opts.toNumber,
     metadata: opts.metadata,
+    // Lets the prompt read the caller's number back to them ({{caller_number}}).
+    retell_llm_dynamic_variables: { caller_number: spokenCallerNumber(opts.fromNumber) },
   });
   return { callId: call.call_id };
 }

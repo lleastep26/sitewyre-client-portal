@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ownerSms = vi.fn();
 const findOrCreateContact = vi.fn();
+const findContactByPhone = vi.fn();
+const inngestSend = vi.fn();
 
 vi.mock("@/lib/adapters", () => ({ getSmsProvider: () => ({ send: ownerSms }) }));
-vi.mock("@/lib/a2p/sending", () => ({ resolveSmsFrom: () => "+15555550100" }));
-vi.mock("@/lib/crm/contacts", () => ({ findOrCreateContact }));
+vi.mock("@/lib/crm/contacts", () => ({ findOrCreateContact, findContactByPhone }));
+vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSend } }));
 
 type Row = Record<string, unknown>;
 let alreadyRecorded: boolean;
@@ -30,14 +32,26 @@ function chainFor(table: string) {
     maybeSingle: async () => {
       if (table === "clients") {
         return {
-          data: { id: "client1", phone: "+15129998888", timezone: "America/Chicago", user_id: "user1" },
+          data: {
+            id: "client1",
+            phone: "+15129998888",
+            timezone: "America/Chicago",
+            user_id: "user1",
+            business_name: "Acme Plumbing",
+            a2p_status: "pending",
+            a2p_pipeline: {},
+            twilio_phone_number: "+15555550100",
+          },
         };
       }
       if (table === "appointments") return { data: appointment };
       if (table === "pipeline_stages") return { data: { id: "stage1" } };
       return { data: null };
     },
-    single: async () => ({ data: { id: "lead_new", name: "Unknown caller", contact_id: "contact_new" } }),
+    single: async () => ({
+      data: { id: "lead_new", name: inserted.leads?.[0]?.name, contact_id: "contact_new" },
+      error: null,
+    }),
     insert: (row: Row) => {
       (inserted[table] ??= []).push(row);
       return chain;
@@ -71,12 +85,27 @@ async function record(overrides: Partial<typeof base> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   alreadyRecorded = false;
-  leads = [{ id: "lead1", name: "Jane Doe", phone: "+15551234567", contact_id: "contact1" }];
+  // Saved by the agent a minute into the call.
+  leads = [
+    {
+      id: "lead1",
+      name: "Jane Doe",
+      phone: "+15551234567",
+      contact_id: "contact1",
+      stage_id: "stage1",
+      source: "ai_receptionist",
+      lifecycle_status: "new",
+      created_at: "2026-11-13T15:01:00.000Z",
+      last_activity_at: "2026-11-13T15:01:00.000Z",
+    },
+  ];
   appointment = null;
   inserted = {};
   updated = {};
   ownerSms.mockResolvedValue({ id: "SM1", status: "sent" });
-  findOrCreateContact.mockResolvedValue({ id: "contact_new" });
+  findOrCreateContact.mockResolvedValue({ id: "contact_new", name: "+15551234567" });
+  findContactByPhone.mockResolvedValue(null);
+  inngestSend.mockResolvedValue(undefined);
 });
 
 describe("recordAiCallOutcome", () => {
@@ -105,6 +134,22 @@ describe("recordAiCallOutcome", () => {
     expect(body).toContain("+15551234567");
     expect(body).toContain("leaking water heater");
     expect(body).toContain("No booking made.");
+    expect(body).toContain("Acme Plumbing");
+    // Sent from Sitewyre's registered sender, never the client's
+    // unregistered number, and the outcome is saved on the call's log.
+    expect(ownerSms.mock.calls[0][0].from).toBeUndefined();
+    expect(updated.workflow_runs?.[0]).toMatchObject({
+      log: expect.objectContaining({ callId: "call_1", ownerText: "sent" }),
+    });
+  });
+
+  it("logs a failed owner text instead of hiding it", async () => {
+    ownerSms.mockRejectedValue(new Error("twilio down"));
+    const result = await record();
+    expect(result).toEqual({ recorded: true });
+    expect(updated.workflow_runs?.[0]).toMatchObject({
+      log: expect.objectContaining({ ownerText: "failed" }),
+    });
   });
 
   it("includes a booking made during the call", async () => {
@@ -133,6 +178,40 @@ describe("recordAiCallOutcome", () => {
       message: "Caller has a leaking water heater.",
     });
     expect((ownerSms.mock.calls[0][0].body as string)).toContain("Unknown caller");
+    expect(inngestSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "portal/lead.created",
+        data: expect.objectContaining({ leadId: "lead_new", skipOwnerAlert: true }),
+      }),
+    );
+  });
+
+  it("starts a new lead instead of reusing a months-old one for the same number", async () => {
+    leads = [
+      {
+        id: "old_lead",
+        name: "Clay",
+        phone: "5551234567",
+        contact_id: null,
+        stage_id: null,
+        source: null,
+        lifecycle_status: "new",
+        created_at: "2026-09-15T21:32:27.000Z",
+        last_activity_at: null,
+      },
+    ];
+    findOrCreateContact.mockResolvedValue({ id: "contact_new", name: "Clay" });
+    await record();
+    expect(inserted.leads?.[0]).toMatchObject({
+      name: "Clay",
+      source: "ai_receptionist",
+      stage_id: "stage1",
+      contact_id: "contact_new",
+    });
+    expect(inserted.workflow_runs?.[0]).toMatchObject({
+      log: expect.objectContaining({ leadId: "lead_new" }),
+    });
+    expect((ownerSms.mock.calls[0][0].body as string)).toContain("Clay");
   });
 
   it("still texts the owner when no summary ever arrived", async () => {

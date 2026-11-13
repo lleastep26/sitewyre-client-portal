@@ -6,7 +6,7 @@ import { normalizePhone } from "@/lib/utils";
 import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
 import { validateTwilioSignature } from "@/lib/twilio/validate";
 import { getSmsProvider } from "@/lib/adapters";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { resolveOwnerAlertFrom } from "@/lib/a2p/sending";
 import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
 import { getAppUrl } from "@/lib/supabase/env";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
@@ -156,12 +156,11 @@ export async function POST(request: Request) {
             .then(() => true)
             .catch(() => false));
         if (!queuedForAi) {
-          const ownerFrom = resolveSmsFrom(client);
-          if (client.phone && ownerFrom) {
+          if (client.phone) {
             await getSmsProvider()
               .send({
                 to: normalizePhone(client.phone),
-                from: ownerFrom,
+                from: resolveOwnerAlertFrom(client),
                 body: `${openLead.name} replied: ${body.slice(0, 120)} — reply in your portal inbox.`,
               })
               .catch(() => undefined);

@@ -6,7 +6,7 @@ const sendPushToClient = vi.fn();
 
 vi.mock("@/lib/chat-widget/assistant", () => ({ runChatAssistant }));
 vi.mock("@/lib/adapters", () => ({ getSmsProvider: () => ({ send: ownerSms }) }));
-vi.mock("@/lib/a2p/sending", () => ({ resolveSmsFrom: () => "+15555550100" }));
+vi.mock("@/lib/a2p/sending", () => ({ resolveOwnerAlertFrom: () => undefined }));
 vi.mock("@/lib/push/web-push", () => ({ sendPushToClient }));
 vi.mock("@/lib/business-knowledge/load", () => ({
   loadBusinessKnowledgeParts: async () => ({ bookableServices: [], availability: [], faqs: [] }),

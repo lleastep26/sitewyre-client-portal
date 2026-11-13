@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClientRow, Database } from "@/lib/supabase/types";
 import { getSmsProvider } from "@/lib/adapters";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { resolveOwnerAlertFrom, resolveSmsFrom } from "@/lib/a2p/sending";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 import { isOptedOut } from "@/lib/funnels/opt-out";
 import { sendFunnelMessage } from "@/lib/funnels/send";
@@ -304,10 +304,13 @@ export async function handOffToOwner(
   const prefix = opts.reason === "emergency" ? "URGENT — " : "";
   const alert = `${prefix}${opts.contact.name} ${HANDOFF_LABELS[opts.reason]}: "${opts.lastInboundBody.slice(0, 100)}" — the AI has stopped; reply in your portal inbox.`;
 
-  const ownerFrom = resolveSmsFrom(opts.client);
-  if (opts.client.phone && ownerFrom) {
+  if (opts.client.phone) {
     await getSmsProvider()
-      .send({ to: normalizePhone(opts.client.phone), from: ownerFrom, body: alert })
+      .send({
+        to: normalizePhone(opts.client.phone),
+        from: resolveOwnerAlertFrom(opts.client),
+        body: alert,
+      })
       .catch(() => undefined);
   }
   await sendPushToClient(opts.client.id, {

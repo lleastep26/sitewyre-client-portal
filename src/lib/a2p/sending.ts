@@ -20,3 +20,19 @@ export function resolveSmsFrom(client: A2pSendingClient | null | undefined): str
   }
   return client.twilio_phone_number;
 }
+
+/**
+ * Sender for texts to the business owner's own phone (alerts, after-call
+ * summaries). A client with an approved campaign uses their own Messaging
+ * Service. Everyone else gets `undefined`, which makes the SMS adapter
+ * send from Sitewyre's own registered sender: carriers reject texts from
+ * a business number that isn't registered yet (Twilio error 30034), so an
+ * owner alert sent from it would never arrive.
+ */
+export function resolveOwnerAlertFrom(
+  client: A2pSendingClient | null | undefined,
+): string | undefined {
+  if (client?.a2p_status !== "approved") return undefined;
+  const pipeline = client.a2p_pipeline as Partial<A2pPipelineState> | null;
+  return pipeline?.messagingServiceSid ?? undefined;
+}

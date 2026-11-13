@@ -6,7 +6,7 @@ import {
   type RetellFunctionCallBody,
 } from "@/lib/retell/webhook";
 import { getSmsProvider, getVoiceProvider } from "@/lib/adapters";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { resolveOwnerAlertFrom } from "@/lib/a2p/sending";
 import { normalizePhone } from "@/lib/utils";
 import { getAppUrl } from "@/lib/supabase/env";
 import { whisperTwiml } from "@/lib/twilio/call-screen";
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     await getSmsProvider()
       .send({
         to: normalizePhone(client.phone),
-        from: resolveSmsFrom(client) ?? undefined,
+        from: resolveOwnerAlertFrom(client),
         body: `URGENT — possible emergency on an AI-answered call: ${summary}. We're trying to connect you now.`,
       })
       .catch(() => undefined);

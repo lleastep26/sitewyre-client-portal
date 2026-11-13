@@ -97,6 +97,28 @@ describe("buildRetellBeginMessage", () => {
   });
 });
 
+describe("buildRetellGeneralPrompt name and number checks", () => {
+  it("asks callers to spell an unclear name and reads back name and number before ending", () => {
+    const prompt = buildRetellGeneralPrompt({
+      client: {
+        business_name: "Acme Plumbing",
+        trade: "plumbing",
+        service_area: null,
+        services_offered: null,
+        after_hours_rules: null,
+        ai_never_say: null,
+      },
+      bookableServices: [],
+      availability: [],
+      faqs: [],
+    });
+    expect(prompt).toContain("ask them to spell it");
+    expect(prompt).toContain("{{caller_number}}");
+    expect(prompt).toContain("read back their name and that phone number");
+    expect(prompt).toContain("call create_or_update_lead again with the corrected caller_name and caller_phone");
+  });
+});
+
 describe("buildRetellGeneralPrompt", () => {
   it("includes the knowledge summary plus the fixed behavior rules", () => {
     const prompt = buildRetellGeneralPrompt({

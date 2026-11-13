@@ -1,12 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "retell-sdk";
-import { retellSipUri, verifyRetellSignature } from "@/lib/integrations/retell";
+import { retellSipUri, spokenCallerNumber, verifyRetellSignature } from "@/lib/integrations/retell";
 
 beforeEach(() => {
   vi.unstubAllEnvs();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe("spokenCallerNumber", () => {
+  it("formats a US number so the agent can read it back", () => {
+    expect(spokenCallerNumber("+14055550123")).toBe("405-555-0123");
+    expect(spokenCallerNumber("4055550123")).toBe("405-555-0123");
+  });
+
+  it("says unknown for withheld or non-US caller ID", () => {
+    expect(spokenCallerNumber("anonymous")).toBe("unknown");
+    expect(spokenCallerNumber("+266696687")).toBe("unknown");
+    expect(spokenCallerNumber("+442071234567")).toBe("unknown");
+  });
 });
 
 describe("retellSipUri", () => {

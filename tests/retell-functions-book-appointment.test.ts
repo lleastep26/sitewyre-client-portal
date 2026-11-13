@@ -19,7 +19,10 @@ vi.mock("@/lib/crm/contacts", () => ({ findOrCreateContact }));
 vi.mock("@/lib/scheduling/slots", () => ({ isSlotAvailable }));
 vi.mock("@/lib/scheduling/calendar-sync", () => ({ getExternalBusyTimes, pushAppointmentCreated }));
 vi.mock("@/lib/scheduling/reminders", () => ({ enqueueAppointmentSms }));
-vi.mock("@/lib/a2p/sending", () => ({ resolveSmsFrom: (c: unknown) => (c ? "+15550001111" : null) }));
+vi.mock("@/lib/a2p/sending", () => ({
+  resolveSmsFrom: (c: unknown) => (c ? "+15550001111" : null),
+  resolveOwnerAlertFrom: () => undefined,
+}));
 vi.mock("@/lib/leads/lifecycle", () => ({ handleLeadBookedForContact }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSend } }));
 

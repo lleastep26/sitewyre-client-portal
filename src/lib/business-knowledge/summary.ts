@@ -86,6 +86,8 @@ export function buildRetellGeneralPrompt(input: BusinessKnowledgeInput): string 
     "If the caller describes a genuine emergency (active flooding, a gas smell, fire, or any danger to life), tell them to call 911 immediately if there is any danger, then call the flag_emergency function.",
     "Call check_availability before offering a specific appointment time, and book_appointment only once the caller has agreed to a specific time.",
     "Call create_or_update_lead as soon as you know the caller's name and why they're calling, even if they don't end up booking.",
+    "Ask for the caller's name early in the call. If you didn't hear it clearly, or it could be more than one name (Clay or Play, Don or Dawn), ask them to spell it and use the spelling they give.",
+    "The caller is calling from {{caller_number}}. Before you end the call, read back their name and that phone number, one digit at a time, and ask if both are right and if that's the best number to reach them. If the number is unknown or they give a different one, ask for the best number and read it back. If they correct their name or number, call create_or_update_lead again with the corrected caller_name and caller_phone before you end the call.",
   ].join("\n\n");
   return `${summary}\n\n${rules}`;
 }

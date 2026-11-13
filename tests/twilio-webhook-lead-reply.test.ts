@@ -42,7 +42,7 @@ vi.mock("@/lib/adapters", () => ({
   }),
 }));
 vi.mock("@/lib/a2p/sending", () => ({
-  resolveSmsFrom: () => "+15555550100",
+  resolveOwnerAlertFrom: () => undefined,
 }));
 
 function makeTable() {

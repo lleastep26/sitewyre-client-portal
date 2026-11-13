@@ -12,7 +12,7 @@ vi.mock("@/lib/adapters", () => ({
   getSmsProvider: () => ({ send: smsSend }),
   getVoiceProvider: () => ({ createOutboundCall }),
 }));
-vi.mock("@/lib/a2p/sending", () => ({ resolveSmsFrom: () => "+15550001111" }));
+vi.mock("@/lib/a2p/sending", () => ({ resolveOwnerAlertFrom: () => undefined }));
 
 function buildSupabase() {
   return {

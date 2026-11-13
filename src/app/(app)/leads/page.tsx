@@ -178,6 +178,7 @@ function TimelineDetail({ log, status }: { log: unknown; status: string }) {
     recordingUrl?: unknown;
     sms?: unknown;
     reason?: unknown;
+    ownerText?: unknown;
   };
   const summary = typeof entry.summary === "string" ? entry.summary : null;
   const recordingUrl =
@@ -200,10 +201,20 @@ function TimelineDetail({ log, status }: { log: unknown; status: string }) {
         : status === "skipped" && typeof entry.reason === "string"
           ? entry.reason
           : null;
+  // The after-call text to the owner (AI receptionist calls).
+  const ownerText =
+    entry.ownerText === "sent"
+      ? " Summary texted to the owner."
+      : entry.ownerText === "no_owner_phone"
+        ? " Summary not texted to the owner: no owner mobile number is saved in Business Profile."
+        : entry.ownerText === "failed"
+          ? " Summary not texted to the owner: the text could not be sent."
+          : null;
   if (!summary && !recordingUrl && !blocked && !ownerAlert) return null;
   return (
     <span className="mt-0.5 block text-charcoal/60">
       {summary}
+      {ownerText}
       {ownerAlert ? `Owner alert not sent: ${ownerAlertReasonLabel(String(entry.reason))}.` : null}
       {blocked ? `Text not sent: ${blockReasonLabel(blocked)}.` : null}
       {recordingUrl ? (

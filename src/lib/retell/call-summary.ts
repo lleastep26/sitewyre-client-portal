@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { getSmsProvider } from "@/lib/adapters";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
-import { findOrCreateContact } from "@/lib/crm/contacts";
+import { resolveOwnerAlertFrom } from "@/lib/a2p/sending";
+import { findContactByPhone, findOrCreateContact } from "@/lib/crm/contacts";
 import { normalizePhone } from "@/lib/utils";
 import { localTimeLabel } from "@/lib/assistant/booking";
+import { createCallLead, findLeadForCall, touchCallLead } from "./call-lead";
 
 type Admin = SupabaseClient<Database>;
 
@@ -54,59 +55,48 @@ export async function recordAiCallOutcome(
   const phone = normalizePhone(input.callerNumber ?? "");
   const summary = input.summary?.trim() || "No summary was available for this call.";
 
-  // The lead the agent created or updated during the call — the most
-  // recent one for this number, whatever its status (a booking made on
-  // the call has already moved it to "booked").
+  // The lead this call belongs to: the one the agent saved during the
+  // call (a booking may already have moved it to "booked"), or the
+  // caller's still-live open lead. An old lead for the same number is
+  // left alone, so the call gets a new lead instead of disappearing into it.
+  const callStartedAt = input.startTimestamp ? new Date(input.startTimestamp) : null;
   let lead: { id: string; name: string; contact_id: string | null } | null = null;
-  if (phone) {
-    const { data: recent } = await supabase
-      .from("leads")
-      .select("id, name, phone, contact_id")
-      .eq("client_id", input.clientId)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    lead = (recent ?? []).find((l) => normalizePhone(l.phone) === phone) ?? null;
-  }
+  // Matched on the caller's contact as well as the number, because the
+  // caller may have asked to be reached on a different number.
+  const knownContact = phone ? await findContactByPhone(supabase, input.clientId, phone) : null;
+  const existing = phone
+    ? await findLeadForCall(supabase, input.clientId, phone, {
+        callStartedAt,
+        contactId: knownContact?.id ?? null,
+      })
+    : null;
 
-  let contactId = lead?.contact_id ?? null;
+  let contactId = existing?.contact_id ?? null;
+  let contactName: string | null = null;
   if (!contactId && phone) {
     const contact = await findOrCreateContact(supabase, {
       clientId: input.clientId,
-      name: lead?.name ?? phone,
+      name: existing?.name ?? phone,
       phone,
       source: "ai_receptionist",
     });
     contactId = contact.id;
+    // A contact made just now is named after the number: not a real name.
+    contactName = contact.name && contact.name !== phone ? contact.name : null;
   }
 
-  if (!lead) {
-    const { data: stage } = await supabase
-      .from("pipeline_stages")
-      .select("id")
-      .eq("client_id", input.clientId)
-      .eq("name", "New")
-      .maybeSingle();
-    const { data: created } = await supabase
-      .from("leads")
-      .insert({
-        client_id: input.clientId,
-        contact_id: contactId,
-        stage_id: stage?.id ?? null,
-        name: "Unknown caller",
-        phone: phone || "unknown",
-        message: summary,
-        source: "ai_receptionist",
-        owner_id: client.user_id,
-        last_activity_at: new Date().toISOString(),
-      })
-      .select("id, name, contact_id")
-      .single();
-    lead = created;
+  if (existing) {
+    await touchCallLead(supabase, input.clientId, existing, { contactId });
+    lead = { id: existing.id, name: existing.name, contact_id: existing.contact_id ?? contactId };
   } else {
-    await supabase
-      .from("leads")
-      .update({ last_activity_at: new Date().toISOString() })
-      .eq("id", lead.id);
+    const created = await createCallLead(supabase, {
+      client,
+      contactId,
+      name: contactName,
+      phone,
+      message: summary,
+    });
+    lead = created.lead;
   }
 
   // A booking made during this call, if any.
@@ -131,18 +121,19 @@ export async function recordAiCallOutcome(
   }
 
   // Shows on the lead's timeline, and marks this call as recorded.
+  const log = {
+    leadId: lead?.id ?? null,
+    callId: input.callId,
+    from: phone || null,
+    summary,
+    recordingUrl: input.recordingUrl,
+    booked,
+  };
   await supabase.from("workflow_runs").insert({
     client_id: input.clientId,
     trigger: AI_CALL_TRIGGER,
     status: "handled",
-    log: {
-      leadId: lead?.id ?? null,
-      callId: input.callId,
-      from: phone || null,
-      summary,
-      recordingUrl: input.recordingUrl,
-      booked,
-    },
+    log,
   });
 
   if (contactId) {
@@ -168,22 +159,32 @@ export async function recordAiCallOutcome(
       .eq("twilio_call_sid", input.twilioCallSid);
   }
 
-  // The one owner text for this call.
+  // The one owner text for this call. It goes out from Sitewyre's
+  // registered sender until the client's own number is approved, and
+  // what happened to it is saved on the call's log entry.
+  let ownerText: "sent" | "failed" | "no_owner_phone" = "no_owner_phone";
   if (client.phone) {
     const who = lead?.name && lead.name !== "Unknown caller" ? lead.name : "Unknown caller";
     const body = [
-      `AI receptionist took a call: ${who}${phone ? `, ${phone}` : ""}.`,
+      `AI receptionist took a call for ${client.business_name ?? "your business"}: ${who}${phone ? `, ${phone}` : ""}.`,
       summary.length > 280 ? `${summary.slice(0, 277)}...` : summary,
       booked ? `Booked: ${booked.service}, ${booked.local}.` : "No booking made.",
     ].join(" ");
-    await getSmsProvider()
+    ownerText = await getSmsProvider()
       .send({
         to: normalizePhone(client.phone),
-        from: resolveSmsFrom(client) ?? undefined,
+        from: resolveOwnerAlertFrom(client),
         body,
       })
-      .catch(() => undefined);
+      .then(() => "sent" as const)
+      .catch(() => "failed" as const);
   }
+  await supabase
+    .from("workflow_runs")
+    .update({ log: { ...log, ownerText } })
+    .eq("client_id", input.clientId)
+    .eq("trigger", AI_CALL_TRIGGER)
+    .contains("log", { callId: input.callId });
 
   return { recorded: true };
 }

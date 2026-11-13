@@ -6,7 +6,7 @@ import { isSlotAvailable } from "@/lib/scheduling/slots";
 import { findOpenSlots } from "@/lib/scheduling/service-slots";
 import { getExternalBusyTimes, pushAppointmentCreated } from "@/lib/scheduling/calendar-sync";
 import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
-import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { resolveOwnerAlertFrom, resolveSmsFrom } from "@/lib/a2p/sending";
 import { handleLeadBookedForContact } from "@/lib/leads/lifecycle";
 import { getSmsProvider } from "@/lib/adapters";
 import { inngest } from "@/lib/inngest/client";
@@ -222,7 +222,7 @@ export async function bookAppointmentForCustomer(
     await getSmsProvider()
       .send({
         to: normalizePhone(client.phone),
-        from: from ?? undefined,
+        from: resolveOwnerAlertFrom(client),
         body: `AI text assistant booked ${customerName}${customerPhone ? ` (${customerPhone})` : ""}: ${service.name}, ${local}.`,
       })
       .catch(() => undefined);
