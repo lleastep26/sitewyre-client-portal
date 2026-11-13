@@ -74,14 +74,6 @@ export async function requireMembership(preferredClientId?: string) {
       .eq("id", membership.client_id)
       .maybeSingle();
     client = data;
-  } else {
-    const { data } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    client = data;
-    role = "owner";
   }
 
   // The admin_view_client_id cookie is read ONLY inside this branch, for a
