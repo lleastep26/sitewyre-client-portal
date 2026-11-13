@@ -6,9 +6,8 @@ import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
-import { getSmsProvider } from "@/lib/adapters";
 import { handleLeadBookedForContact, setLeadLifecycleStatus } from "@/lib/leads/lifecycle";
-import { applyTemplate } from "@/lib/automations";
+import { sendNoShowText } from "@/lib/scheduling/no-show-text";
 import { inngest } from "@/lib/inngest/client";
 import {
   pushAppointmentCreated,
@@ -205,15 +204,11 @@ async function handleNoShow(
     .select("phones")
     .eq("id", appointment.contact_id)
     .maybeSingle();
-  const phone = contact?.phones?.[0];
-  const from = resolveSmsFrom(client);
-  if (!phone || !from) return;
-
-  const body = applyTemplate(
-    "Hi, we missed you for your {{title}} appointment with {{business_name}} — give us a call to reschedule.",
-    { title: appointment.title ?? "scheduled", business_name: client.business_name ?? "us" },
-  );
-  await getSmsProvider().send({ to: phone, from, body });
+  await sendNoShowText(supabase, client, {
+    contactId: appointment.contact_id,
+    phone: contact?.phones?.[0],
+    title: appointment.title,
+  });
 }
 
 export async function ensureCalendarAvailability() {
