@@ -32,6 +32,17 @@ export class TwilioVoiceProvider implements VoiceProvider {
     const client = this.getClient();
     await client.calls(callSid).update({ twiml });
   }
+
+  async hasOtherLiveCall(opts: { from: string; to: string; excludeCallSid: string }) {
+    const client = this.getClient();
+    // An inbound call shows as "ringing" until it's bridged and
+    // "in-progress" after, so both count as live.
+    const [ringing, inProgress] = await Promise.all([
+      client.calls.list({ from: opts.from, to: opts.to, status: "ringing", limit: 5 }),
+      client.calls.list({ from: opts.from, to: opts.to, status: "in-progress", limit: 5 }),
+    ]);
+    return [...ringing, ...inProgress].some((call) => call.sid !== opts.excludeCallSid);
+  }
 }
 
 export class FakeVoiceProvider implements VoiceProvider {
@@ -45,6 +56,11 @@ export class FakeVoiceProvider implements VoiceProvider {
 
   async redirectCall(callSid: string, twiml: string) {
     this.redirects.push({ callSid, twiml });
+  }
+
+  public otherLiveCall = false;
+  async hasOtherLiveCall() {
+    return this.otherLiveCall;
   }
 }
 

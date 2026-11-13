@@ -39,6 +39,57 @@ export async function setOwnForwardPhone(
   return { ok: true };
 }
 
+/**
+ * "My business number forwards unanswered calls to Sitewyre." With it on,
+ * every call to the Sitewyre number goes straight to the AI receptionist
+ * (see src/lib/twilio/forwarded-calls.ts), so it needs the AI receptionist
+ * to be on: a forwarded call can't ring the owner again without looping.
+ */
+export async function setCallForwarding(
+  formData: FormData,
+): Promise<{ ok: true } | { error: string }> {
+  const { supabase, client, role } = await requireMembership();
+  if (!client) return { error: "No business is linked to this account." };
+  if (!canEditPhoneEmail(role)) {
+    return { error: "Only the owner or a Sitewyre admin can manage the phone number." };
+  }
+
+  const enabled = formData.get("enabled") === "true";
+  const raw = String(formData.get("businessLinePhone") ?? "").trim();
+  const digits = raw.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  if (raw && digits.length !== 10) {
+    return { error: "Enter your business number with its area code." };
+  }
+  const businessLinePhone = raw ? normalizePhone(digits) : null;
+
+  if (enabled) {
+    if (!client.twilio_phone_number) {
+      return { error: "This business needs a Sitewyre number before calls can be forwarded to it." };
+    }
+    if (!client.ai_receptionist_enabled || !client.retell_agent_id) {
+      return {
+        error:
+          "Turn on the AI receptionist first (AI assistants tab). Forwarded calls are answered by it.",
+      };
+    }
+    if (!businessLinePhone) {
+      return { error: "Enter the business number you're forwarding from." };
+    }
+    if (businessLinePhone === normalizePhone(client.twilio_phone_number)) {
+      return { error: "That's your Sitewyre number. Enter your own business number." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("clients")
+    .update({ call_forwarding_enabled: enabled, business_line_phone: businessLinePhone })
+    .eq("id", client.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 export async function previewOwnNumber(
   formData: FormData,
 ): Promise<{ phoneNumber: string; monthlyPrice: string } | { error: string }> {

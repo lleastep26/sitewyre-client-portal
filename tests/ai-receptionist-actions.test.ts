@@ -80,7 +80,11 @@ describe("setAiReceptionistEnabled", () => {
     const result = await setAiReceptionistEnabled(fd({ enabled: "false" }));
     expect(result).toEqual({ ok: true });
     expect(syncRetellAgent).not.toHaveBeenCalled();
-    expect(updates).toContainEqual({ ai_receptionist_enabled: false });
+    // Forwarded calls need the AI receptionist, so that setting goes off too.
+    expect(updates).toContainEqual({
+      ai_receptionist_enabled: false,
+      call_forwarding_enabled: false,
+    });
   });
 });
 

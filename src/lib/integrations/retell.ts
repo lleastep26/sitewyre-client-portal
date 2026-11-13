@@ -144,6 +144,9 @@ export async function registerRetellPhoneCall(opts: {
   fromNumber: string;
   toNumber: string;
   metadata: Record<string, string>;
+  /** The real caller's number when it isn't `fromNumber` (a forwarded call
+   * whose caller ID is the business's own line); "" when it isn't known. */
+  callerNumber?: string;
 }): Promise<{ callId: string }> {
   const client = getClient();
   const call = await client.call.registerPhoneCall({
@@ -153,7 +156,9 @@ export async function registerRetellPhoneCall(opts: {
     to_number: opts.toNumber,
     metadata: opts.metadata,
     // Lets the prompt read the caller's number back to them ({{caller_number}}).
-    retell_llm_dynamic_variables: { caller_number: spokenCallerNumber(opts.fromNumber) },
+    retell_llm_dynamic_variables: {
+      caller_number: spokenCallerNumber(opts.callerNumber ?? opts.fromNumber),
+    },
   });
   return { callId: call.call_id };
 }

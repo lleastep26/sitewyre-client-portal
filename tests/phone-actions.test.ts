@@ -6,6 +6,8 @@ let fakeClient: {
   twilio_phone_number: string | null;
   forward_to_phone: string | null;
   sms_monthly_allowance: number;
+  ai_receptionist_enabled?: boolean;
+  retell_agent_id?: string | null;
 };
 let fakeRole: string;
 
@@ -166,5 +168,71 @@ describe("setSmsMonthlyAllowance", () => {
     const result = await setSmsMonthlyAllowance(fd({ smsMonthlyAllowance: "1000" }));
     expect(result).toEqual({ ok: true });
     expect(updates[0]).toEqual({ sms_monthly_allowance: 1000 });
+  });
+});
+
+describe("setCallForwarding", () => {
+  const ready = () => {
+    fakeClient = {
+      ...fakeClient,
+      twilio_phone_number: "+14055550100",
+      ai_receptionist_enabled: true,
+      retell_agent_id: "agent1",
+    };
+  };
+
+  async function save(fields: Record<string, string>) {
+    const updates: unknown[] = [];
+    fakeSupabase = buildSupabase((patch) => updates.push(patch));
+    const { setCallForwarding } = await import("@/app/(app)/settings/phone-actions");
+    return { result: await setCallForwarding(fd(fields)), updates };
+  }
+
+  it("turns forwarding on and saves the business number", async () => {
+    ready();
+    const { result, updates } = await save({ enabled: "true", businessLinePhone: "(405) 555-0122" });
+    expect(result).toEqual({ ok: true });
+    expect(updates).toEqual([
+      { call_forwarding_enabled: true, business_line_phone: "+14055550122" },
+    ]);
+  });
+
+  it("refuses when the AI receptionist is off", async () => {
+    ready();
+    fakeClient.ai_receptionist_enabled = false;
+    const { result, updates } = await save({ enabled: "true", businessLinePhone: "4055550122" });
+    expect(result).toEqual({ error: expect.stringContaining("Turn on the AI receptionist first") });
+    expect(updates).toEqual([]);
+  });
+
+  it("refuses without a Sitewyre number, a business number, or with the Sitewyre number itself", async () => {
+    const noNumber = await save({ enabled: "true", businessLinePhone: "4055550122" });
+    expect(noNumber.result).toEqual({ error: expect.stringContaining("needs a Sitewyre number") });
+
+    ready();
+    const blank = await save({ enabled: "true", businessLinePhone: "" });
+    expect(blank.result).toEqual({ error: expect.stringContaining("business number you're forwarding from") });
+
+    const same = await save({ enabled: "true", businessLinePhone: "405-555-0100" });
+    expect(same.result).toEqual({ error: expect.stringContaining("That's your Sitewyre number") });
+
+    const short = await save({ enabled: "true", businessLinePhone: "555-0122" });
+    expect(short.result).toEqual({ error: expect.stringContaining("area code") });
+  });
+
+  it("can always be turned off, AI receptionist or not", async () => {
+    const { result, updates } = await save({ enabled: "false", businessLinePhone: "4055550122" });
+    expect(result).toEqual({ ok: true });
+    expect(updates).toEqual([
+      { call_forwarding_enabled: false, business_line_phone: "+14055550122" },
+    ]);
+  });
+
+  it("blocks office and crew", async () => {
+    ready();
+    fakeRole = "office";
+    const { result, updates } = await save({ enabled: "true", businessLinePhone: "4055550122" });
+    expect(result).toEqual({ error: expect.stringContaining("owner or a Sitewyre admin") });
+    expect(updates).toEqual([]);
   });
 });

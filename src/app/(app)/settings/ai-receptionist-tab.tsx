@@ -17,6 +17,7 @@ export function AiReceptionistTab({
   bookingEnabled,
   minutesUsedThisMonth,
   minutesAllowance,
+  callForwardingEnabled = false,
 }: {
   canEdit: boolean;
   isAdmin: boolean;
@@ -24,6 +25,7 @@ export function AiReceptionistTab({
   bookingEnabled: boolean;
   minutesUsedThisMonth: number;
   minutesAllowance: number;
+  callForwardingEnabled?: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [allowance, setAllowance] = useState(String(minutesAllowance));
@@ -90,6 +92,15 @@ export function AiReceptionistTab({
           </Button>
         ) : null}
       </div>
+
+      {enabled && callForwardingEnabled ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Your business number forwards unanswered calls to Sitewyre, and the
+          AI receptionist answers them. Turning it off also turns that
+          setting off here. Cancel the forwarding on your phone too (Phone
+          tab), or forwarded callers will reach nobody.
+        </p>
+      ) : null}
 
       <div className="flex items-center justify-between rounded-lg border border-charcoal/10 bg-white p-3">
         <div>

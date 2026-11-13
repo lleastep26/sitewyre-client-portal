@@ -32,7 +32,13 @@ export async function setAiReceptionistEnabled(
 
   const { error } = await supabase
     .from("clients")
-    .update({ ai_receptionist_enabled: enabled })
+    // Forwarded calls are answered by the AI receptionist, so turning it
+    // off turns the forwarding setting off with it.
+    .update(
+      enabled
+        ? { ai_receptionist_enabled: true }
+        : { ai_receptionist_enabled: false, call_forwarding_enabled: false },
+    )
     .eq("id", client.id);
   if (error) return { error: error.message };
 

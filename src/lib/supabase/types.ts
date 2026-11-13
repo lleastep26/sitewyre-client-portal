@@ -67,6 +67,8 @@ export type ClientRow = {
   services_offered: string | null;
   after_hours_rules: string | null;
   ai_never_say: string | null;
+  call_forwarding_enabled: boolean;
+  business_line_phone: string | null;
   ai_receptionist_enabled: boolean;
   ai_receptionist_booking_enabled: boolean;
   ai_receptionist_callback_enabled: boolean;
@@ -317,6 +319,7 @@ export type Database = {
         missed: boolean;
         twilio_call_sid: string | null;
         ai_handled: boolean;
+        forwarded_from: string | null;
         created_at: string;
       }>;
       reviews: TableDef<{

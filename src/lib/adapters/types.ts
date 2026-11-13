@@ -71,4 +71,8 @@ export interface VoiceProvider {
   /** Redirects an in-progress call to new TwiML — the standard Twilio
    * mechanism for a warm transfer (move a live call into a conference). */
   redirectCall(callSid: string, twiml: string): Promise<void>;
+  /** Whether this caller already has another call ringing or in progress
+   * on the same number. Used to spot our own ring to the owner coming back
+   * through the owner's call forwarding, before it can loop. */
+  hasOtherLiveCall(opts: { from: string; to: string; excludeCallSid: string }): Promise<boolean>;
 }

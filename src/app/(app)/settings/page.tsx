@@ -16,6 +16,7 @@ import { SettingsTabs } from "./settings-tabs";
 import { onlinePaymentsEnabled } from "@/lib/flags";
 import { BusinessProfileTab } from "./business-profile-tab";
 import { PhoneTab } from "./phone-tab";
+import { CallForwardingCard } from "./call-forwarding-card";
 import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
 import { BusinessKnowledgeTab } from "./business-knowledge-tab";
@@ -123,6 +124,7 @@ export default async function SettingsPage({
     { count: smsOutboundCount },
     { count: emailOutboundCount },
     { count: workflowRunsCount },
+    { data: lastForwardedCall },
   ] = await Promise.all([
     supabase
       .from("plan_features")
@@ -148,6 +150,15 @@ export default async function SettingsPage({
       .select("*", { count: "exact", head: true })
       .eq("client_id", client.id)
       .gte("created_at", usageMonthStart),
+    // Proof for the client that their call forwarding reaches Sitewyre.
+    supabase
+      .from("calls")
+      .select("created_at")
+      .eq("client_id", client.id)
+      .not("forwarded_from", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const usage: UsageCounts = {
@@ -482,17 +493,44 @@ export default async function SettingsPage({
   );
 
   const phoneTab = (
-    <Card>
-      <CardTitle>Phone</CardTitle>
-      <PhoneTab
-        canEdit={canEditBusinessProfile}
-        isAdmin={role === "sitewyre_admin"}
-        twilioPhoneNumber={client.twilio_phone_number}
-        forwardToPhone={client.forward_to_phone}
-        smsOutboundThisMonth={usage.smsOutbound}
-        smsMonthlyAllowance={client.sms_monthly_allowance}
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardTitle>Phone</CardTitle>
+        <PhoneTab
+          canEdit={canEditBusinessProfile}
+          isAdmin={role === "sitewyre_admin"}
+          twilioPhoneNumber={client.twilio_phone_number}
+          forwardToPhone={client.forward_to_phone}
+          smsOutboundThisMonth={usage.smsOutbound}
+          smsMonthlyAllowance={client.sms_monthly_allowance}
+        />
+      </Card>
+      <Card>
+        <CardTitle>Keep your own business number</CardTitle>
+        <CardDescription className="mt-1">
+          Have your own number send calls you don&apos;t answer to the AI
+          receptionist.
+        </CardDescription>
+        <div className="mt-3">
+          <CallForwardingCard
+            canEdit={canEditBusinessProfile}
+            sitewyreNumber={client.twilio_phone_number}
+            aiReceptionistOn={client.ai_receptionist_enabled && !!client.retell_agent_id}
+            enabled={client.call_forwarding_enabled}
+            businessLinePhone={client.business_line_phone}
+            lastForwardedCallLabel={
+              lastForwardedCall
+                ? new Date(lastForwardedCall.created_at).toLocaleString("en-US", {
+                    timeZone: client.timezone ?? "America/Chicago",
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })
+                : null
+            }
+          />
+        </div>
+      </Card>
+    </div>
   );
 
   const a2pTab = (
@@ -571,6 +609,7 @@ export default async function SettingsPage({
             bookingEnabled={client.ai_receptionist_booking_enabled}
             minutesUsedThisMonth={client.retell_minutes_used_this_month}
             minutesAllowance={client.retell_minutes_allowance}
+            callForwardingEnabled={client.call_forwarding_enabled}
           />
         </div>
       </Card>
