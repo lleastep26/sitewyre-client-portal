@@ -10,7 +10,7 @@ import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
 import { getAppUrl } from "@/lib/supabase/env";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
-import { ownerAcceptedCall } from "@/lib/twilio/call-screen";
+import { ownerAcceptedCall, usesCallScreening } from "@/lib/twilio/call-screen";
 import {
   findOpenLeadForPhone,
   isOwnerPhone,
@@ -64,10 +64,16 @@ export async function POST(request: Request) {
   const dialCallStatus = params.get("DialCallStatus");
   let ownerDidNotAnswer =
     dialCallStatus === "no-answer" || dialCallStatus === "busy" || dialCallStatus === "failed";
-  // The owner's phone was answered, but that may have been its voicemail.
-  // Only a call where someone pressed 1 at the prompt counts as answered
-  // (see call-screen.ts); anything else is handled as unanswered.
-  if (callSid && (dialCallStatus === "completed" || dialCallStatus === "answered")) {
+  // With the AI receptionist on, the owner's phone being answered may have
+  // been its voicemail. Only a call where someone pressed 1 at the prompt
+  // counts as answered (see call-screen.ts); anything else is handled as
+  // unanswered. Clients without the AI receptionist have no prompt, so an
+  // answered call is simply answered.
+  if (
+    callSid &&
+    usesCallScreening(client) &&
+    (dialCallStatus === "completed" || dialCallStatus === "answered")
+  ) {
     ownerDidNotAnswer = !(await ownerAcceptedCall(supabase, client.id, callSid));
   }
   if (callSid && (callStatus === "no-answer" || callStatus === "busy" || ownerDidNotAnswer)) {

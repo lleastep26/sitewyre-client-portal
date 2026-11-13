@@ -5,7 +5,7 @@ import { getAppUrl } from "@/lib/supabase/env";
 import { isWithinBusinessHours } from "@/lib/scheduling/slots";
 import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
 import { inngest } from "@/lib/inngest/client";
-import { ownerWhisperUrl, screenedDialTwiml } from "@/lib/twilio/call-screen";
+import { ownerWhisperUrl, screenedDialTwiml, usesCallScreening } from "@/lib/twilio/call-screen";
 
 const EMPTY_TWIML = "<Response></Response>";
 
@@ -46,10 +46,11 @@ async function handOffToRetell(opts: {
 
 /**
  * The Voice URL set on every purchased number. In business hours, dials
- * forward_to_phone with a timeout and a "press 1 to accept" prompt on the
- * owner's side; the `action` callback posts DialCallStatus back to
- * /api/twilio/webhook, which detects no-answer/busy/not-accepted there
- * (and hands off to the AI receptionist if it's on).
+ * forward_to_phone with a timeout; the `action` callback posts
+ * DialCallStatus back to /api/twilio/webhook, which detects no-answer/busy
+ * there (and hands off to the AI receptionist if it's on). A client with
+ * the AI receptionist on also gets a "press 1 to accept" prompt on the
+ * owner's side, so a voicemail pickup counts as unanswered too.
  * Outside business hours, a client with the AI receptionist on skips
  * ringing the owner and hands straight to Retell instead. A client who
  * hasn't turned it on keeps the exact pre-Block-6 behavior either way.
@@ -106,14 +107,17 @@ export async function POST(request: Request) {
   const forward = normalizePhone(client.forward_to_phone);
   const timeout = client.dial_timeout_seconds ?? 15;
   const actionUrl = `${getAppUrl()}/api/twilio/webhook`;
-  if (!callSid) {
+  // Without the AI receptionist the call is forwarded as it always was, so
+  // an unanswered call still reaches the owner's own voicemail.
+  if (!callSid || !usesCallScreening(client)) {
     return xml(
       `<Response><Dial timeout="${timeout}" action="${actionUrl}"><Number>${forward}</Number></Dial></Response>`,
     );
   }
 
-  // Whoever answers the owner's phone must press 1 before the caller is
-  // connected, so a voicemail pickup counts as unanswered (see call-screen.ts).
+  // With the AI receptionist on, whoever answers the owner's phone must
+  // press 1 before the caller is connected, so a voicemail pickup counts
+  // as unanswered and the AI takes the call (see call-screen.ts).
   return xml(
     screenedDialTwiml({
       forwardTo: forward,

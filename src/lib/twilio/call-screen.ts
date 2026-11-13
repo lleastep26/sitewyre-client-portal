@@ -56,10 +56,26 @@ export function screenedDialTwiml(opts: {
   );
 }
 
+/**
+ * Screening is only used where there is something to hand the caller to:
+ * a client with the AI receptionist on. Everyone else is forwarded plainly
+ * and an unanswered call reaches the owner's own voicemail.
+ */
+export function usesCallScreening(client: {
+  ai_receptionist_enabled?: boolean | null;
+  retell_agent_id?: string | null;
+}): boolean {
+  return Boolean(client.ai_receptionist_enabled && client.retell_agent_id);
+}
+
 /** What the owner's side hears on answering. No digit within a few seconds hangs up that leg. */
-export function whisperTwiml(businessName: string | null | undefined, acceptUrl: string): string {
+export function whisperTwiml(
+  businessName: string | null | undefined,
+  acceptUrl: string,
+  callLabel: "Call" | "Emergency call" = "Call",
+): string {
   const name = businessName?.trim() || "your business";
-  const prompt = xmlEscape(`Call for ${name}, press 1 to accept.`);
+  const prompt = xmlEscape(`${callLabel} for ${name}, press 1 to accept.`);
   return (
     `<Response>` +
     `<Gather numDigits="1" timeout="3" action="${xmlEscape(acceptUrl)}">` +

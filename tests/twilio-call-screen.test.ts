@@ -7,7 +7,19 @@ let callsInserted: Array<Record<string, unknown>>;
 const registerRetellPhoneCall = vi.fn();
 const inngestSend = vi.fn();
 
+// Open all day, so the voice route is always "in business hours".
+const OPEN_ALL_DAY = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+  weekday,
+  start_time: "00:00",
+  end_time: "24:00",
+  buffer_minutes: 0,
+  min_notice_hours: 0,
+}));
+
 function makeTable(table: string) {
+  if (table === "availability") {
+    return { select: () => ({ eq: () => ({ data: OPEN_ALL_DAY }) }) };
+  }
   const chain = {
     select: () => chain,
     eq: () => chain,
@@ -40,6 +52,8 @@ function formRequest(path: string, fields: Record<string, string>) {
   return new Request(`http://localhost:3000${path}`, { method: "POST", body: form });
 }
 
+const AI_ON = { ai_receptionist_enabled: true, retell_agent_id: "agent1" };
+
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
   vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
@@ -56,24 +70,43 @@ beforeEach(() => {
     dial_timeout_seconds: 15,
     ai_receptionist_enabled: false,
     retell_agent_id: null,
+    timezone: "UTC",
   };
 });
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+const INCOMING = { To: "+15555550100", From: "+15559876543", CallSid: "CA123" };
+
 describe("forwarded call — press 1 to accept", () => {
-  it("rings the owner with the prompt attached and keeps the caller on ringing", async () => {
+  it("with the AI receptionist on, rings the owner with the prompt attached and keeps the caller on ringing", async () => {
+    clientRow = { ...clientRow, ...AI_ON };
     const { POST } = await import("@/app/api/twilio/voice/route");
-    const res = await POST(
-      formRequest("/api/twilio/voice", { To: "+15555550100", From: "+15559876543", CallSid: "CA123" }),
-    );
+    const res = await POST(formRequest("/api/twilio/voice", INCOMING));
     const body = await res.text();
     expect(body).toContain('answerOnBridge="true"');
     expect(body).toContain(
       '<Number url="http://localhost:3000/api/twilio/whisper?client=client1&amp;parent=CA123">+15550009999</Number>',
     );
     expect(body).toContain('action="http://localhost:3000/api/twilio/webhook"');
+    expect(registerRetellPhoneCall).not.toHaveBeenCalled();
+  });
+
+  it("without the AI receptionist, forwards plainly so an unanswered call reaches the owner's voicemail", async () => {
+    const { POST } = await import("@/app/api/twilio/voice/route");
+    const res = await POST(formRequest("/api/twilio/voice", INCOMING));
+    expect(await res.text()).toBe(
+      '<Response><Dial timeout="15" action="http://localhost:3000/api/twilio/webhook"><Number>+15550009999</Number></Dial></Response>',
+    );
+  });
+
+  it("forwards plainly when the switch is on but no agent exists yet", async () => {
+    clientRow = { ...clientRow, ai_receptionist_enabled: true, retell_agent_id: null };
+    const { POST } = await import("@/app/api/twilio/voice/route");
+    const body = await (await POST(formRequest("/api/twilio/voice", INCOMING))).text();
+    expect(body).toContain("<Number>+15550009999</Number>");
+    expect(body).not.toContain("whisper");
   });
 
   it("plays the business name and asks for 1, then hangs up the owner's leg if nothing is pressed", async () => {
@@ -119,16 +152,10 @@ describe("forwarded call — press 1 to accept", () => {
 });
 
 describe("Dial callback after the owner's phone was answered", () => {
-  const callback = {
-    To: "+15555550100",
-    From: "+15559876543",
-    CallSid: "CA123",
-    CallStatus: "in-progress",
-    DialCallStatus: "completed",
-  };
+  const callback = { ...INCOMING, CallStatus: "in-progress", DialCallStatus: "completed" };
 
   it("treats a voicemail pickup (nobody pressed 1) as unanswered and hands the caller to the AI", async () => {
-    clientRow = { ...clientRow, ai_receptionist_enabled: true, retell_agent_id: "agent1" };
+    clientRow = { ...clientRow, ...AI_ON };
     registerRetellPhoneCall.mockResolvedValue({ callId: "call_xyz" });
     const { POST } = await import("@/app/api/twilio/webhook/route");
     const res = await POST(formRequest("/api/twilio/webhook", callback));
@@ -142,17 +169,8 @@ describe("Dial callback after the owner's phone was answered", () => {
     );
   });
 
-  it("logs a missed call (for the text-back) when the AI receptionist is off", async () => {
-    const { POST } = await import("@/app/api/twilio/webhook/route");
-    const res = await POST(formRequest("/api/twilio/webhook", callback));
-
-    expect(await res.text()).toBe("<Response></Response>");
-    expect(callsInserted[0]).toMatchObject({ missed: true, twilio_call_sid: "CA123" });
-    expect(registerRetellPhoneCall).not.toHaveBeenCalled();
-  });
-
   it("does nothing more when the owner pressed 1 and took the call", async () => {
-    clientRow = { ...clientRow, ai_receptionist_enabled: true, retell_agent_id: "agent1" };
+    clientRow = { ...clientRow, ...AI_ON };
     acceptedRows = [{ id: "call-row" }];
     const { POST } = await import("@/app/api/twilio/webhook/route");
     const res = await POST(formRequest("/api/twilio/webhook", callback));
@@ -160,6 +178,23 @@ describe("Dial callback after the owner's phone was answered", () => {
     expect(await res.text()).toBe("<Response></Response>");
     expect(callsInserted).toHaveLength(0);
     expect(inngestSend).not.toHaveBeenCalled();
+    expect(registerRetellPhoneCall).not.toHaveBeenCalled();
+  });
+
+  it("without the AI receptionist, an answered call is just answered (no prompt was played)", async () => {
+    const { POST } = await import("@/app/api/twilio/webhook/route");
+    const res = await POST(formRequest("/api/twilio/webhook", callback));
+
+    expect(await res.text()).toBe("<Response></Response>");
+    expect(callsInserted).toHaveLength(0);
+    expect(inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("without the AI receptionist, a no-answer is still a missed call for the text-back", async () => {
+    const { POST } = await import("@/app/api/twilio/webhook/route");
+    await POST(formRequest("/api/twilio/webhook", { ...callback, DialCallStatus: "no-answer" }));
+
+    expect(callsInserted[0]).toMatchObject({ missed: true, twilio_call_sid: "CA123" });
     expect(registerRetellPhoneCall).not.toHaveBeenCalled();
   });
 });
