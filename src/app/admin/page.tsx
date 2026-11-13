@@ -7,6 +7,7 @@ import { NumberPurchase } from "./number-purchase";
 import { StripeLink } from "./stripe-link";
 import { WelcomeEmailResend } from "./welcome-email-resend";
 import { AddClientForm } from "./add-client-form";
+import { AD_PROVIDERS } from "@/lib/integrations/ads";
 
 export default async function AdminPage() {
   const { supabase, isSitewyreAdmin, agencyId } = await requireAgencyOrSitewyreAdmin();
@@ -17,11 +18,23 @@ export default async function AdminPage() {
   let query = supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_assistant_enabled, ai_text_replies_used_this_month, ai_text_replies_allowance, chat_widget_enabled, ai_chat_replies_used_this_month",
+      "id, business_name, domain, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_assistant_enabled, ai_text_replies_used_this_month, ai_text_replies_allowance, chat_widget_enabled, ai_chat_replies_used_this_month",
     )
     .order("business_name", { ascending: true });
   if (agencyId) query = query.eq("agency_id", agencyId);
   const { data: clients, error } = await query;
+
+  // Connection requests from Settings → Integrations, so they can be set
+  // up once each platform approves API access.
+  const { data: integrationRequests } = await supabase
+    .from("integrations")
+    .select("client_id, provider")
+    .eq("status", "requested");
+  const requestedByClient = new Map<string, string[]>();
+  for (const row of integrationRequests ?? []) {
+    const name = AD_PROVIDERS.find((p) => p.id === row.provider)?.name ?? row.provider;
+    requestedByClient.set(row.client_id, [...(requestedByClient.get(row.client_id) ?? []), name]);
+  }
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-lg px-4 pb-12 pt-6">
@@ -76,6 +89,11 @@ export default async function AdminPage() {
                 </form>
               </div>
 
+              <p className={c.domain ? "mt-1 text-xs text-charcoal/50" : "mt-1 text-xs text-red-600"}>
+                {c.domain
+                  ? `Website: ${c.domain}`
+                  : "No website domain saved — website forms and the chat widget can't find this client. Add it in Settings → Business Profile."}
+              </p>
               {isSitewyreAdmin ? (
                 <div className="mt-2">
                   <A2pStatusSelect clientId={c.id} status={c.a2p_status} />
@@ -123,6 +141,11 @@ export default async function AdminPage() {
                   {c.ai_text_replies_used_this_month > c.ai_text_replies_allowance
                     ? " — over allowance, bill manually"
                     : ""}
+                </p>
+              ) : null}
+              {requestedByClient.has(c.id) ? (
+                <p className="mt-1 text-xs text-copper">
+                  Wants connecting: {requestedByClient.get(c.id)!.join(", ")}
                 </p>
               ) : null}
               {c.chat_widget_enabled ? (

@@ -12,6 +12,7 @@ export function AddClientForm() {
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [domain, setDomain] = useState("");
   const [niche, setNiche] = useState(NICHE_OPTIONS[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -32,6 +33,7 @@ export function AddClientForm() {
       fd.set("ownerName", ownerName);
       fd.set("ownerEmail", ownerEmail);
       fd.set("phone", phone);
+      fd.set("domain", domain);
       fd.set("niche", niche);
       const result = await addClient(fd);
       if ("error" in result) setError(result.error);
@@ -64,6 +66,24 @@ export function AddClientForm() {
           onChange={(e) => setPhone(e.target.value)}
           placeholder="Phone"
         />
+        <div>
+          <label htmlFor="add_client_domain" className="text-xs font-medium text-charcoal/70">
+            Website domain
+          </label>
+          <Input
+            id="add_client_domain"
+            value={domain}
+            onChange={(e) => setDomain(e.target.value)}
+            placeholder="acme-plumbing.com"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <p className="mt-1 text-xs text-charcoal/50">
+            The address of their live website. You can paste the full link.
+            Website lead forms and the chat widget find this client by it, so
+            leave it blank only if they have no site yet.
+          </p>
+        </div>
         <select
           value={niche}
           onChange={(e) => setNiche(e.target.value)}

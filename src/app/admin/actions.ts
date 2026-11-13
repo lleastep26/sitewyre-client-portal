@@ -9,7 +9,8 @@ import {
   requireAdmin,
   requireAgencyOrSitewyreAdmin,
 } from "@/lib/auth/session";
-import { normalizePhone } from "@/lib/utils";
+import { normalizeHost, normalizePhone } from "@/lib/utils";
+import { isValidDomain } from "@/lib/business-profile/validate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEmailProvider } from "@/lib/adapters";
 import { welcomeEmailHtml } from "@/lib/email/welcome";
@@ -93,11 +94,20 @@ export async function addClient(
 ): Promise<{ ok: true; clientId: string } | { error: string }> {
   const { user, agencyId } = await requireAgencyOrSitewyreAdmin();
 
+  // The website domain is how website lead forms and the chat widget find
+  // this client, so it's checked here rather than saved as typed.
+  const domainRaw = String(formData.get("domain") ?? "").trim();
+  if (domainRaw && !isValidDomain(domainRaw)) {
+    return { error: "Enter the website domain like acme-plumbing.com" };
+  }
+  const domain = domainRaw ? normalizeHost(domainRaw) : undefined;
+
   const parsed = createAccountSchema.safeParse({
     business_name: String(formData.get("businessName") ?? "").trim(),
     trade: String(formData.get("niche") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim() || undefined,
     email: String(formData.get("ownerEmail") ?? "").trim(),
+    domain,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -110,6 +120,10 @@ export async function addClient(
   // sitewyre_admin/agency_admin to insert directly — both require the
   // service-role client, same as the n8n-facing route.
   const admin = createAdminClient();
+  if (domain) {
+    const { data: taken } = await admin.from("clients").select("id").eq("domain", domain).limit(1);
+    if (taken?.length) return { error: "Another client already uses that website domain." };
+  }
   const result = await createClientAccount(admin, parsed.data, {
     agencyId: agencyId ?? SITEWYRE_AGENCY_ID,
     actorId: user.id,

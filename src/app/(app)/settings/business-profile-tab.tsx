@@ -201,19 +201,29 @@ export function BusinessProfileTab({
         </div>
         <div>
           <Label htmlFor="bp_domain">
-            Branded domain {canEditDomain ? "" : "(admin only)"}
+            Website domain {canEditDomain ? "" : "(admin only)"}
           </Label>
           <Input
             id="bp_domain"
             name="domain"
             defaultValue={initial.domain}
             disabled={!canEditDomain}
-            placeholder="example.com"
+            placeholder="acme-plumbing.com"
+            autoCapitalize="none"
+            spellCheck={false}
           />
-          {!canEditDomain ? (
-            <p className="mt-1 text-xs text-charcoal/50">
-              Lead capture on your website depends on this — only a Sitewyre
-              admin can change it.
+          <p className="mt-1 text-xs text-charcoal/50">
+            The address of the live website, without https:// or www — for
+            example acme-plumbing.com. Website lead forms and the chat widget
+            find this business by it, so it has to match the live site.
+            {canEditDomain
+              ? " You can paste the full link; it's trimmed to the domain when saved."
+              : " Only a Sitewyre admin can change it."}
+          </p>
+          {!initial.domain ? (
+            <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              No website domain is saved yet, so website lead forms and the
+              chat widget can&apos;t find this business.
             </p>
           ) : null}
         </div>

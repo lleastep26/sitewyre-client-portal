@@ -6,6 +6,7 @@ let fakeClientRow: { id: string; agency_id: string } | null;
 let fakeIsSitewyreAdmin: boolean;
 let fakeAgencyId: string | null;
 let cookieStore: Map<string, string>;
+let domainTaken: boolean;
 
 const createClientAccount = vi.fn();
 
@@ -66,6 +67,7 @@ function buildSupabase() {
             return this;
           },
           maybeSingle: async () => ({ data: fakeClientRow }),
+          limit: async () => ({ data: domainTaken ? [{ id: "other-client" }] : [] }),
           update() {
             return { eq: async () => ({ error: null }) };
           },
@@ -82,6 +84,7 @@ function buildSupabase() {
 beforeEach(() => {
   vi.clearAllMocks();
   cookieStore = new Map();
+  domainTaken = false;
   fakeIsSitewyreAdmin = true;
   fakeAgencyId = null;
   fakeClientRow = { id: "client1", agency_id: "agency1" };
@@ -199,5 +202,42 @@ describe("addClient", () => {
       expect.anything(),
       expect.objectContaining({ agencyId: "agency1" }),
     );
+  });
+
+  it("saves the website domain trimmed down from a pasted link", async () => {
+    createClientAccount.mockResolvedValue({ ok: true, clientId: "new-client", siteKey: "sk", twilioPhoneNumber: null });
+    const { addClient } = await import("@/app/admin/actions");
+    await addClient(
+      fd({
+        businessName: "Acme Plumbing",
+        ownerEmail: "jo@example.com",
+        niche: "plumbing",
+        domain: "https://www.Acme-Plumbing.com/contact",
+      }),
+    );
+    expect(createClientAccount).toHaveBeenCalledWith(
+      fakeAdminSupabase,
+      expect.objectContaining({ domain: "acme-plumbing.com" }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects something that isn't a domain", async () => {
+    const { addClient } = await import("@/app/admin/actions");
+    const result = await addClient(
+      fd({ businessName: "Acme Plumbing", ownerEmail: "jo@example.com", niche: "plumbing", domain: "not a domain" }),
+    );
+    expect(result).toEqual({ error: expect.stringContaining("acme-plumbing.com") });
+    expect(createClientAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects a domain another client already uses", async () => {
+    domainTaken = true;
+    const { addClient } = await import("@/app/admin/actions");
+    const result = await addClient(
+      fd({ businessName: "Acme Plumbing", ownerEmail: "jo@example.com", niche: "plumbing", domain: "acme-plumbing.com" }),
+    );
+    expect(result).toEqual({ error: expect.stringContaining("already uses") });
+    expect(createClientAccount).not.toHaveBeenCalled();
   });
 });

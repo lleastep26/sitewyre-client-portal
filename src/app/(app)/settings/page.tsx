@@ -23,6 +23,8 @@ import { CalendarsTab } from "./calendars-tab";
 import { AiReceptionistTab } from "./ai-receptionist-tab";
 import { AiTextAssistantCard } from "./ai-text-assistant-card";
 import { ChatWidgetCard } from "./chat-widget-card";
+import { IntegrationsTab } from "./integrations-tab";
+import { AD_PROVIDERS, isAdProviderApproved, type IntegrationStatus } from "@/lib/integrations/ads";
 import { getAppUrl } from "@/lib/supabase/env";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
@@ -182,6 +184,11 @@ export default async function SettingsPage({
     .select("provider, created_at")
     .eq("client_id", client.id)
     .maybeSingle();
+
+  const { data: integrationRows } = await supabase
+    .from("integrations")
+    .select("provider, status, requested_at")
+    .eq("client_id", client.id);
 
   const canEditBusinessProfile = role === "owner" || role === "sitewyre_admin";
 
@@ -598,6 +605,30 @@ export default async function SettingsPage({
     </div>
   );
 
+  const integrationsTab = (
+    <Card>
+      <CardTitle>Integrations</CardTitle>
+      <div className="mt-3">
+        <IntegrationsTab
+          canEdit={canEditBusinessProfile}
+          cards={AD_PROVIDERS.map((p) => {
+            const row = (integrationRows ?? []).find((r) => r.provider === p.id);
+            const status: IntegrationStatus =
+              row?.status === "connected" || row?.status === "requested" ? row.status : "disconnected";
+            return {
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              approved: isAdProviderApproved(p.id),
+              status,
+              requestedAt: row?.requested_at ?? null,
+            };
+          })}
+        />
+      </div>
+    </Card>
+  );
+
   const calendarsTab = (
     <Card>
       <CardTitle>Calendars</CardTitle>
@@ -632,6 +663,7 @@ export default async function SettingsPage({
           { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },
           { id: "calendars", label: "Calendars", content: calendarsTab },
           { id: "ai-receptionist", label: "AI assistants", content: aiReceptionistTab },
+          { id: "integrations", label: "Integrations", content: integrationsTab },
         ]}
       />
     </div>

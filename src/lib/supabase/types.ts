@@ -416,8 +416,31 @@ export type Database = {
         encrypted_tokens: string | null;
         status: string;
         sync_error: string | null;
+        requested_at: string | null;
+        requested_by_user_id: string | null;
+        connected_at: string | null;
+        external_account_id: string | null;
         created_at: string;
         updated_at: string | null;
+      }>;
+      ad_stats_daily: TableDef<{
+        id: string;
+        client_id: string;
+        provider: string;
+        stat_date: string;
+        spend: number;
+        impressions: number;
+        clicks: number;
+        leads: number;
+        created_at: string;
+      }>;
+      ad_platform_leads: TableDef<{
+        id: string;
+        client_id: string;
+        provider: string;
+        external_lead_id: string;
+        lead_id: string | null;
+        received_at: string;
       }>;
       push_subscriptions: TableDef<{
         id: string;
