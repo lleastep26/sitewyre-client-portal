@@ -16,6 +16,7 @@ import {
   slaNudgeOutcome,
 } from "@/lib/leads/speed-to-lead";
 import { isOptedOut, logSkippedOptOut, smsBlockReason } from "@/lib/funnels/opt-out";
+import { sendLeadReplyEmail } from "@/lib/leads/reply-email";
 import { hasRecentSend } from "@/lib/funnels/dedupe";
 import { buildReviewMessage } from "@/lib/funnels/review-link";
 import { nextFunnelSendableAt } from "@/lib/funnels/quiet-hours";
@@ -136,10 +137,13 @@ export const leadAutoReply = inngest.createFunction(
       );
     }
 
+    // A rejected address is recorded, not thrown: it must not hold back
+    // the owner's alert or the timeline entry below.
+    let emailReply: { sent: true } | { sent: false; error: string } | null = null;
     if (email) {
       const mail = getEmailProvider();
-      await step.run("email-homeowner", async () =>
-        mail.send({
+      emailReply = await step.run("email-homeowner", async () =>
+        sendLeadReplyEmail(mail, {
           to: email,
           subject: `We got your request — ${client.business_name ?? "Sitewyre"}`,
           html: `<p>${body}</p>`,
@@ -148,6 +152,7 @@ export const leadAutoReply = inngest.createFunction(
         }),
       );
     }
+    const emailSent = emailReply?.sent === true;
 
     if (client.phone && !skipOwnerAlert) {
       await step.run("alert-owner-sms", async () =>
@@ -162,8 +167,15 @@ export const leadAutoReply = inngest.createFunction(
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "lead_auto_reply",
-        status: smsOutcome === "sent" || email ? "sent" : "skipped",
-        log: { leadId, phone, email, sms: smsOutcome, emailSent: Boolean(email) },
+        status: smsOutcome === "sent" || emailSent ? "sent" : "skipped",
+        log: {
+          leadId,
+          phone,
+          email,
+          sms: smsOutcome,
+          emailSent,
+          ...(emailReply && !emailReply.sent ? { emailError: emailReply.error } : {}),
+        },
       });
     });
 

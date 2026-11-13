@@ -185,6 +185,7 @@ function TimelineDetail({ log, status }: { log: unknown; status: string }) {
     sms?: unknown;
     reason?: unknown;
     ownerText?: unknown;
+    emailError?: unknown;
   };
   const summary = typeof entry.summary === "string" ? entry.summary : null;
   const recordingUrl =
@@ -216,13 +217,18 @@ function TimelineDetail({ log, status }: { log: unknown; status: string }) {
         : entry.ownerText === "failed"
           ? " Summary not texted to the owner: the text could not be sent."
           : null;
-  if (!summary && !recordingUrl && !blocked && !ownerAlert) return null;
+  const emailFailed =
+    typeof entry.emailError === "string"
+      ? " Email reply not sent: the lead's email address was rejected."
+      : null;
+  if (!summary && !recordingUrl && !blocked && !ownerAlert && !emailFailed) return null;
   return (
     <span className="mt-0.5 block text-charcoal/60">
       {summary}
       {ownerText}
       {ownerAlert ? `Owner alert not sent: ${ownerAlertReasonLabel(String(entry.reason))}.` : null}
       {blocked ? `Text not sent: ${blockReasonLabel(blocked)}.` : null}
+      {emailFailed}
       {recordingUrl ? (
         <>
           {" "}
