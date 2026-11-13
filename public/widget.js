@@ -4,6 +4,8 @@
  * Install with one tag, just before </body>:
  *   <script src="https://<portal>/widget.js" data-site-key="..." async></script>
  * Without data-site-key the business is looked up by the page's domain.
+ * Optional data-mobile-offset="66" lifts the bubble by that many pixels on
+ * narrow screens, for sites with a bar fixed to the bottom of the page.
  *
  * Plain JavaScript, no dependencies. Everything is drawn inside a shadow
  * root so the host site's styles can't affect it and its styles can't leak
@@ -116,7 +118,8 @@
     ".error{color:#b42318;font-size:12px;margin:4px 0 0}" +
     ".foot{border-top:1px solid #e4e7eb;padding:10px;display:flex;gap:8px;align-items:flex-end}" +
     ".foot textarea{flex:1;height:40px;max-height:96px}" +
-    ".note{font-size:11px;color:#7b8794;text-align:center;padding:0 10px 8px}";
+    ".note{font-size:11px;color:#7b8794;text-align:center;padding:0 10px 8px}" +
+    "@media (max-width:860px){.bubble{bottom:calc(16px + var(--sw-mobile-offset,0px))}.panel{bottom:calc(84px + var(--sw-mobile-offset,0px));height:min(520px,calc(100vh - 110px - var(--sw-mobile-offset,0px)))}}";
 
   var BUBBLE_ICON =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>';
@@ -132,6 +135,8 @@
     var style = el("style", null, STYLES);
     root.appendChild(style);
     host.style.setProperty("--sw-color", config.color || DEFAULT_COLOR);
+    var mobileOffset = parseInt(script.getAttribute("data-mobile-offset") || "0", 10);
+    if (mobileOffset > 0 && mobileOffset <= 200) host.style.setProperty("--sw-mobile-offset", mobileOffset + "px");
 
     var bubble = el("button", "bubble");
     bubble.type = "button";
