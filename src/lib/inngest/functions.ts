@@ -33,6 +33,14 @@ import {
   recordLeadTexted,
   setLeadLifecycleStatus,
 } from "@/lib/leads/lifecycle";
+import {
+  aiReplySendTime,
+  generateAiTextReply,
+  handOffToOwner,
+  isAiPausedForContact,
+  loadAiTextContext,
+  sendAiText,
+} from "@/lib/assistant/thread";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -1139,12 +1147,12 @@ export const monthlyResultsEmail = inngest.createFunction(
 );
 
 /**
- * Resets retell_minutes_used_this_month at midnight on the 1st of the
- * month in each client's own timezone (not a single fixed UTC time, since
- * clients span timezones) — and keeps a retell_usage_history row so
- * overage can be billed after the counter resets. Runs every 15 minutes;
- * the history table's unique(client_id, month_start) constraint makes the
- * reset idempotent across the ~4 ticks that fall in the same local hour.
+ * Resets the monthly AI usage counters (receptionist minutes and text
+ * assistant replies) at midnight on the 1st of the month in each client's
+ * own timezone, and keeps a history row for each so overage can be billed
+ * after the counters reset. Runs every 15 minutes; each history table's
+ * unique(client_id, month_start) constraint makes the reset idempotent
+ * across the ~4 ticks that fall in the same local hour.
  */
 export const retellMinutesMonthlyReset = inngest.createFunction(
   { id: "retell-minutes-monthly-reset", triggers: [{ cron: "*/15 * * * *" }] },
@@ -1157,7 +1165,9 @@ export const retellMinutesMonthlyReset = inngest.createFunction(
       const supabase = createAdminClient();
       const { data: clients } = await supabase
         .from("clients")
-        .select("id, timezone, retell_minutes_used_this_month, retell_minutes_allowance")
+        .select(
+          "id, timezone, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_replies_used_this_month, ai_text_replies_allowance",
+        )
         .eq("status", "active");
 
       const now = new Date();
@@ -1187,7 +1197,7 @@ export const retellMinutesMonthlyReset = inngest.createFunction(
         const prevMonth = month === 1 ? 12 : month - 1;
         const monthStart = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
 
-        const { data: inserted } = await supabase
+        const { data: minutesArchived } = await supabase
           .from("retell_usage_history")
           .upsert(
             {
@@ -1199,13 +1209,32 @@ export const retellMinutesMonthlyReset = inngest.createFunction(
             { onConflict: "client_id,month_start", ignoreDuplicates: true },
           )
           .select("id");
-        if (!inserted?.length) continue;
+        if (minutesArchived?.length) {
+          await supabase
+            .from("clients")
+            .update({ retell_minutes_used_this_month: 0 })
+            .eq("id", client.id);
+          reset += 1;
+        }
 
-        await supabase
-          .from("clients")
-          .update({ retell_minutes_used_this_month: 0 })
-          .eq("id", client.id);
-        reset += 1;
+        const { data: repliesArchived } = await supabase
+          .from("ai_text_usage_history")
+          .upsert(
+            {
+              client_id: client.id,
+              month_start: monthStart,
+              replies_used: client.ai_text_replies_used_this_month,
+              replies_allowance: client.ai_text_replies_allowance,
+            },
+            { onConflict: "client_id,month_start", ignoreDuplicates: true },
+          )
+          .select("id");
+        if (repliesArchived?.length) {
+          await supabase
+            .from("clients")
+            .update({ ai_text_replies_used_this_month: 0 })
+            .eq("id", client.id);
+        }
       }
 
       return { reset };
@@ -1527,6 +1556,122 @@ export const leadReactivationContact = inngest.createFunction(
   },
 );
 
+/**
+ * Answers a lead's text with the AI text assistant.
+ *
+ * Waits 20 seconds so several quick texts get one answer, then re-checks
+ * every gate (assistant on, thread not taken over, lead still open, not
+ * opted out, A2P approved). A reply to a text less than 15 minutes old
+ * goes out at any hour; an older one waits for quiet hours to end, after
+ * which the gates are checked again.
+ *
+ * The model call runs inside one step that never throws — any failure
+ * becomes a hand-off to the owner — so a retry can't book twice.
+ * cancelOn stops a waiting run the moment the owner takes the thread over.
+ */
+export const aiTextReply = inngest.createFunction(
+  {
+    id: "ai-text-reply",
+    triggers: [{ event: "portal/ai-text.inbound" }],
+    concurrency: { key: "event.data.contactId", limit: 1 },
+    cancelOn: [{ event: "portal/ai-text.paused", match: "data.contactId" }],
+    retries: 1,
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: { data: { clientId: string; contactId: string; messageSid: string } };
+    step: StepWithSleepUntil;
+  }) => {
+    const ids = event.data;
+    await step.sleep("collect-quick-texts", "20s");
+    const supabase = createAdminClient();
+
+    // Every read happens inside a step: Inngest re-runs this function from
+    // the top after each step, and a re-read here would see the state the
+    // reply itself just changed (a booked lead is no longer "open").
+    const checkGates = async () => {
+      const ctx = await loadAiTextContext(supabase, ids);
+      if ("skip" in ctx) return { skip: ctx.skip };
+      const sendAt = aiReplySendTime(
+        new Date(ctx.lastInboundAt),
+        new Date(),
+        ctx.client.timezone ?? "America/Chicago",
+      );
+      // Decided once, here, so a replay can't change its mind about waiting.
+      return { holdUntil: sendAt.getTime() - Date.now() > 5_000 ? sendAt.toISOString() : null };
+    };
+
+    const gate = await step.run("check-gates", checkGates);
+    if ("skip" in gate) return { skipped: true, reason: gate.skip };
+
+    if (gate.holdUntil) {
+      await step.sleepUntil("quiet-hours", gate.holdUntil);
+      const recheck = await step.run("recheck-gates", checkGates);
+      if ("skip" in recheck) return { skipped: true, reason: recheck.skip };
+    }
+
+    const result = await step.run("generate", async () => {
+      const ctx = await loadAiTextContext(supabase, ids);
+      if ("skip" in ctx) return { skip: ctx.skip };
+      return {
+        outcome: await generateAiTextReply(supabase, ctx),
+        contact: ctx.contact,
+        leadId: ctx.lead.id,
+        lastInboundBody: ctx.lastInboundBody,
+      };
+    });
+    if ("skip" in result) return { skipped: true, reason: result.skip };
+    const { outcome, contact, leadId, lastInboundBody } = result;
+
+    await step.run("deliver", async () => {
+      // The owner may have taken over while the reply was being written.
+      if (await isAiPausedForContact(supabase, contact.id)) return;
+      const { data: client } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", ids.clientId)
+        .maybeSingle();
+      if (!client) return;
+
+      if (outcome.kind === "reply") {
+        await sendAiText(supabase, {
+          client,
+          contactId: contact.id,
+          to: contact.phone,
+          body: outcome.text,
+        });
+      } else {
+        await handOffToOwner(supabase, {
+          client,
+          contact,
+          reason: outcome.reason,
+          lastInboundBody,
+        });
+      }
+
+      await supabase.from("workflow_runs").insert({
+        client_id: client.id,
+        trigger: "ai_text_assistant",
+        status: outcome.kind,
+        log: {
+          contactId: contact.id,
+          leadId,
+          model: outcome.usage.model,
+          inputTokens: outcome.usage.inputTokens,
+          outputTokens: outcome.usage.outputTokens,
+          ...(outcome.kind === "handoff"
+            ? { reason: outcome.reason, summary: outcome.summary }
+            : { booked: outcome.booked }),
+        },
+      });
+    });
+
+    return { ok: true, outcome: outcome.kind };
+  },
+);
+
 export const functions = [
   leadAutoReply,
   leadFollowUpSequence,
@@ -1542,6 +1687,7 @@ export const functions = [
   rebookingNudge,
   monthlyResultsEmail,
   retellMinutesMonthlyReset,
+  aiTextReply,
   healthMonitor,
   emailDomainVerificationPoll,
   a2pPipelinePoll,

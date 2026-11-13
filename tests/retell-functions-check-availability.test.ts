@@ -83,7 +83,8 @@ describe("POST /api/retell/functions/check-availability", () => {
       { id: "client1", timezone: "America/Chicago" },
       { id: "svc1", name: "Drain Cleaning", duration_minutes: 60 },
     );
-    findOpenSlots.mockResolvedValue([new Date("2026-11-16T15:00:00.000Z")]);
+    const slot = new Date(Date.now() + 3 * 86_400_000);
+    findOpenSlots.mockResolvedValue([slot]);
 
     const res = await callRoute({
       name: "check_availability",
@@ -92,7 +93,9 @@ describe("POST /api/retell/functions/check-availability", () => {
     });
     const json = await res.json();
     expect(json.service).toBe("Drain Cleaning");
-    expect(json.available_times).toEqual(["2026-11-16T15:00:00.000Z"]);
+    expect(json.available_times).toEqual([
+      { start_at: slot.toISOString(), local: expect.stringMatching(/\d{1,2}:\d{2}\s?(AM|PM)/) },
+    ]);
   });
 
   it("errors when no bookable service matches", async () => {

@@ -3,6 +3,7 @@ import {
   buildBusinessKnowledgeSummary,
   buildRetellBeginMessage,
   buildRetellGeneralPrompt,
+  buildTextAssistantPrompt,
 } from "@/lib/business-knowledge/summary";
 
 describe("buildBusinessKnowledgeSummary", () => {
@@ -116,5 +117,38 @@ describe("buildRetellGeneralPrompt", () => {
     expect(prompt).toContain("check_availability");
     expect(prompt).toContain("book_appointment");
     expect(prompt).toContain("create_or_update_lead");
+  });
+});
+
+describe("buildTextAssistantPrompt", () => {
+  const input = {
+    client: {
+      business_name: "Acme Plumbing",
+      trade: "plumbing",
+      service_area: null,
+      services_offered: null,
+      after_hours_rules: null,
+      ai_never_say: "Never mention competitors.",
+    },
+    bookableServices: [{ name: "Service call", duration_minutes: 90 }],
+    availability: [],
+    faqs: [],
+  };
+
+  it("includes the business knowledge and the rules from the spec", () => {
+    const prompt = buildTextAssistantPrompt(input);
+    expect(prompt).toContain("Business: Acme Plumbing");
+    expect(prompt).toContain("- Service call (90 min)");
+    expect(prompt).toContain("Never mention competitors.");
+    expect(prompt).toContain("check_availability");
+    expect(prompt).toContain("book_appointment");
+    expect(prompt).toContain("hand_off_to_owner");
+    expect(prompt).toMatch(/Never state or estimate a price/);
+    expect(prompt).toMatch(/Never promise an arrival time/);
+  });
+
+  it("is identical between calls, so it can be prompt-cached", () => {
+    expect(buildTextAssistantPrompt(input)).toBe(buildTextAssistantPrompt(input));
+    expect(buildTextAssistantPrompt(input)).not.toMatch(/\b20\d\d\b/);
   });
 });

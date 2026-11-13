@@ -6,6 +6,8 @@ import {
   suggestReply,
   createSavedReply,
   deleteSavedReply,
+  takeOverThread,
+  handBackToAi,
 } from "@/app/(app)/inbox/actions";
 import { applyReplyVariables } from "@/lib/inbox/variables";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,12 @@ type Message = {
   direction: string;
   body: string | null;
   created_at: string;
+  ai_generated?: boolean;
 };
+
+/** off: the AI isn't on this thread. ai: the AI is answering. needs_you:
+ * the AI handed off. owner: the owner took the thread over. */
+export type AiThreadState = "off" | "ai" | "needs_you" | "owner";
 
 type SavedReply = {
   id: string;
@@ -34,6 +41,7 @@ export function InboxThread({
   email,
   bookingLink,
   reviewLink,
+  aiState = "off",
   messages,
   savedReplies,
 }: {
@@ -44,6 +52,7 @@ export function InboxThread({
   email?: string | null;
   bookingLink?: string | null;
   reviewLink?: string | null;
+  aiState?: AiThreadState;
   messages: Message[];
   savedReplies: SavedReply[];
 }) {
@@ -71,6 +80,32 @@ export function InboxThread({
 
   return (
     <div className="flex h-[70dvh] flex-col">
+      {aiState !== "off" ? (
+        <div className="mx-4 flex items-center justify-between gap-2 rounded-lg border border-charcoal/10 bg-white px-3 py-2 text-xs">
+          <p className={aiState === "needs_you" ? "font-medium text-red-700" : "text-charcoal/70"}>
+            {aiState === "ai"
+              ? "The AI assistant is answering this thread."
+              : aiState === "needs_you"
+                ? "The AI handed this thread to you and has stopped replying."
+                : "You're handling this thread. The AI is paused."}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res =
+                  aiState === "ai" ? await takeOverThread(contactId) : await handBackToAi(contactId);
+                if ("error" in res) setError(res.error ?? "Couldn't update the thread");
+              })
+            }
+          >
+            {aiState === "ai" ? "Take over" : "Hand back to AI"}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-2">
         {messages.map((m) => (
           <div
@@ -83,6 +118,11 @@ export function InboxThread({
           >
             <p className="text-[10px] uppercase text-charcoal/50">
               {m.channel} · {m.direction}
+              {m.ai_generated ? (
+                <span className="ml-1 rounded bg-charcoal/80 px-1 py-0.5 text-[9px] font-medium text-white">
+                  AI
+                </span>
+              ) : null}
             </p>
             <p className="mt-1 whitespace-pre-wrap">{m.body}</p>
           </div>

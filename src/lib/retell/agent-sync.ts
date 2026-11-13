@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { getAppUrl } from "@/lib/supabase/env";
 import { buildRetellBeginMessage, buildRetellGeneralPrompt } from "@/lib/business-knowledge/summary";
+import { loadBusinessKnowledgeParts } from "@/lib/business-knowledge/load";
 import {
   createRetellAgent,
   updateRetellAgentPrompt,
@@ -21,36 +22,17 @@ function functionUrls(): RetellFunctionUrls {
 }
 
 async function loadKnowledgeInput(supabase: Admin, clientId: string) {
-  const [{ data: client }, { data: services }, { data: availability }, { data: faqs }] =
-    await Promise.all([
-      supabase
-        .from("clients")
-        .select(
-          "business_name, trade, service_area, services_offered, after_hours_rules, ai_never_say, retell_llm_id, retell_agent_id",
-        )
-        .eq("id", clientId)
-        .single(),
-      supabase
-        .from("services")
-        .select("name, duration_minutes")
-        .eq("client_id", clientId)
-        .eq("bookable_online", true),
-      supabase
-        .from("availability")
-        .select("weekday, start_time, end_time")
-        .eq("client_id", clientId),
-      supabase
-        .from("client_faqs")
-        .select("question, answer")
-        .eq("client_id", clientId)
-        .order("position", { ascending: true }),
-    ]);
-  return {
-    client,
-    services: services ?? [],
-    availability: availability ?? [],
-    faqs: faqs ?? [],
-  };
+  const [{ data: client }, parts] = await Promise.all([
+    supabase
+      .from("clients")
+      .select(
+        "business_name, trade, service_area, services_offered, after_hours_rules, ai_never_say, retell_llm_id, retell_agent_id",
+      )
+      .eq("id", clientId)
+      .single(),
+    loadBusinessKnowledgeParts(supabase, clientId),
+  ]);
+  return { client, ...parts };
 }
 
 /**
@@ -64,12 +46,12 @@ export async function syncRetellAgent(
   supabase: Admin,
   clientId: string,
 ): Promise<{ ok: true } | { error: string }> {
-  const { client, services, availability, faqs } = await loadKnowledgeInput(supabase, clientId);
+  const { client, bookableServices, availability, faqs } = await loadKnowledgeInput(supabase, clientId);
   if (!client) return { error: "Client not found." };
 
   const generalPrompt = buildRetellGeneralPrompt({
     client,
-    bookableServices: services,
+    bookableServices,
     availability,
     faqs,
   });

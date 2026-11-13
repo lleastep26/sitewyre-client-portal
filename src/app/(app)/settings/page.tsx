@@ -21,6 +21,7 @@ import { A2pTab } from "./a2p-tab";
 import { BusinessKnowledgeTab } from "./business-knowledge-tab";
 import { CalendarsTab } from "./calendars-tab";
 import { AiReceptionistTab } from "./ai-receptionist-tab";
+import { AiTextAssistantCard } from "./ai-text-assistant-card";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
@@ -550,19 +551,33 @@ export default async function SettingsPage({
   );
 
   const aiReceptionistTab = (
-    <Card>
-      <CardTitle>AI receptionist</CardTitle>
-      <div className="mt-3">
-        <AiReceptionistTab
-          canEdit={canEditBusinessProfile}
-          isAdmin={role === "sitewyre_admin"}
-          enabled={client.ai_receptionist_enabled}
-          bookingEnabled={client.ai_receptionist_booking_enabled}
-          minutesUsedThisMonth={client.retell_minutes_used_this_month}
-          minutesAllowance={client.retell_minutes_allowance}
-        />
-      </div>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardTitle>AI receptionist</CardTitle>
+        <div className="mt-3">
+          <AiReceptionistTab
+            canEdit={canEditBusinessProfile}
+            isAdmin={role === "sitewyre_admin"}
+            enabled={client.ai_receptionist_enabled}
+            bookingEnabled={client.ai_receptionist_booking_enabled}
+            minutesUsedThisMonth={client.retell_minutes_used_this_month}
+            minutesAllowance={client.retell_minutes_allowance}
+          />
+        </div>
+      </Card>
+      <Card>
+        <CardTitle>AI text assistant</CardTitle>
+        <div className="mt-3">
+          <AiTextAssistantCard
+            canEdit={canEditBusinessProfile}
+            isAdmin={role === "sitewyre_admin"}
+            enabled={client.ai_text_assistant_enabled}
+            repliesUsedThisMonth={client.ai_text_replies_used_this_month}
+            repliesAllowance={client.ai_text_replies_allowance}
+          />
+        </div>
+      </Card>
+    </div>
   );
 
   const calendarsTab = (
@@ -598,7 +613,7 @@ export default async function SettingsPage({
           { id: "email", label: "Email", content: emailTab },
           { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },
           { id: "calendars", label: "Calendars", content: calendarsTab },
-          { id: "ai-receptionist", label: "AI receptionist", content: aiReceptionistTab },
+          { id: "ai-receptionist", label: "AI assistants", content: aiReceptionistTab },
         ]}
       />
     </div>

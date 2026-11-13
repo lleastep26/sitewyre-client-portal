@@ -9,6 +9,7 @@ import { getSmsProvider } from "@/lib/adapters";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
 import { getAppUrl } from "@/lib/supabase/env";
+import { checkA2pGate } from "@/lib/funnels/a2p-gate";
 import {
   findOpenLeadForPhone,
   isOwnerPhone,
@@ -107,6 +108,10 @@ export async function POST(request: Request) {
     // the owner. Never triggered by the owner's own phone texting in
     // (e.g. replying to their own lead-alert SMS) — that's not a lead
     // replying.
+    const upper = body.trim().toUpperCase();
+    const isCarrierKeyword =
+      STOP_KEYWORDS.includes(upper) || START_KEYWORDS.includes(upper) || upper === "HELP";
+
     if (!isOwnerPhone(client, from)) {
       const openLead = await findOpenLeadForPhone(supabase, client.id, from);
       if (openLead) {
@@ -118,20 +123,40 @@ export async function POST(request: Request) {
           })
           .catch(() => undefined);
 
-        const ownerFrom = resolveSmsFrom(client);
-        if (client.phone && ownerFrom) {
-          await getSmsProvider()
+        // With the AI text assistant on and the thread not taken over, the
+        // AI answers and the owner is only alerted on a hand-off or a
+        // booking. Otherwise the owner gets the reply alert as before.
+        const aiAnswers =
+          client.ai_text_assistant_enabled &&
+          !contact.ai_paused_at &&
+          !isCarrierKeyword &&
+          checkA2pGate(client, from).allowed;
+        // If the AI job can't be queued, fall back to alerting the owner so
+        // the reply is never dropped.
+        const queuedForAi =
+          aiAnswers &&
+          (await inngest
             .send({
-              to: normalizePhone(client.phone),
-              from: ownerFrom,
-              body: `${openLead.name} replied: ${body.slice(0, 120)} — reply in your portal inbox.`,
+              name: "portal/ai-text.inbound",
+              data: { clientId: client.id, contactId: contact.id, messageSid },
             })
-            .catch(() => undefined);
+            .then(() => true)
+            .catch(() => false));
+        if (!queuedForAi) {
+          const ownerFrom = resolveSmsFrom(client);
+          if (client.phone && ownerFrom) {
+            await getSmsProvider()
+              .send({
+                to: normalizePhone(client.phone),
+                from: ownerFrom,
+                body: `${openLead.name} replied: ${body.slice(0, 120)} — reply in your portal inbox.`,
+              })
+              .catch(() => undefined);
+          }
         }
       }
     }
 
-    const upper = body.trim().toUpperCase();
     if (STOP_KEYWORDS.includes(upper)) {
       await supabase
         .from("contacts")

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth/session";
 import { getAiProvider } from "@/lib/adapters";
 import { sendInboxMessageForClient } from "@/lib/inbox/send";
+import { inngest } from "@/lib/inngest/client";
 
 const DEFAULT_REPLIES = [
   {
@@ -85,6 +86,52 @@ export async function sendInboxMessage(input: {
   const result = await sendInboxMessageForClient(supabase, client, input);
   if ("error" in result) return { error: result.error };
 
+  // The owner texting the customer themselves means they've taken the
+  // thread over — the AI stops answering it until it's handed back.
+  if (input.channel === "sms" && client.ai_text_assistant_enabled) {
+    await pauseAiThread(supabase, client.id, input.contactId, "owner_replied");
+  }
+
+  revalidatePath("/inbox");
+  return { ok: true as const };
+}
+
+async function pauseAiThread(
+  supabase: Awaited<ReturnType<typeof requireMembership>>["supabase"],
+  clientId: string,
+  contactId: string,
+  reason: string,
+) {
+  await supabase
+    .from("contacts")
+    .update({ ai_paused_at: new Date().toISOString(), ai_paused_reason: reason })
+    .eq("id", contactId)
+    .eq("client_id", clientId);
+  // Cancels a reply the AI may still be waiting to send on this thread.
+  await inngest
+    .send({ name: "portal/ai-text.paused", data: { clientId, contactId } })
+    .catch(() => undefined);
+}
+
+export async function takeOverThread(contactId: string) {
+  const { supabase, client } = await requireMembership();
+  if (!client) return { error: "No client" };
+  if (!contactId) return { error: "Contact required" };
+  await pauseAiThread(supabase, client.id, contactId, "owner_takeover");
+  revalidatePath("/inbox");
+  return { ok: true as const };
+}
+
+export async function handBackToAi(contactId: string) {
+  const { supabase, client } = await requireMembership();
+  if (!client) return { error: "No client" };
+  if (!contactId) return { error: "Contact required" };
+  const { error } = await supabase
+    .from("contacts")
+    .update({ ai_paused_at: null, ai_paused_reason: null })
+    .eq("id", contactId)
+    .eq("client_id", client.id);
+  if (error) return { error: error.message };
   revalidatePath("/inbox");
   return { ok: true as const };
 }

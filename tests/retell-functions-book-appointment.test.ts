@@ -138,6 +138,8 @@ describe("POST /api/retell/functions/book-appointment", () => {
     expect(insertedAppointment).toMatchObject({ title: "Drain Cleaning", contact_id: "contact1" });
     expect(handleLeadBookedForContact).toHaveBeenCalledTimes(1);
     expect(pushAppointmentCreated).toHaveBeenCalledTimes(1);
+    // Confirmation and reminders go to the customer, not the owner.
     expect(enqueueAppointmentSms).toHaveBeenCalledTimes(1);
+    expect(enqueueAppointmentSms).toHaveBeenCalledWith(expect.objectContaining({ to: "+15551234567" }));
   });
 });

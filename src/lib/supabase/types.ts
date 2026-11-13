@@ -74,8 +74,20 @@ export type ClientRow = {
   retell_agent_id: string | null;
   retell_minutes_used_this_month: number;
   retell_minutes_allowance: number;
+  ai_text_assistant_enabled: boolean;
+  ai_text_replies_used_this_month: number;
+  ai_text_replies_allowance: number;
   created_at: string;
   updated_at: string | null;
+};
+
+export type AiTextUsageHistoryRow = {
+  id: string;
+  client_id: string;
+  month_start: string;
+  replies_used: number;
+  replies_allowance: number;
+  created_at: string;
 };
 
 export type RetellUsageHistoryRow = {
@@ -117,6 +129,8 @@ export type ContactRow = {
   notes: string | null;
   sms_opt_in: boolean;
   email_opt_in: boolean;
+  ai_paused_at: string | null;
+  ai_paused_reason: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -172,6 +186,7 @@ export type MessageRow = {
   media: unknown;
   status: string | null;
   external_id: string | null;
+  ai_generated: boolean;
   created_at: string;
 };
 
@@ -361,6 +376,7 @@ export type Database = {
       client_faqs: TableDef<ClientFaqRow>;
       calendar_connections: TableDef<CalendarConnectionRow>;
       retell_usage_history: TableDef<RetellUsageHistoryRow>;
+      ai_text_usage_history: TableDef<AiTextUsageHistoryRow>;
       plan_features: TableDef<{
         plan: string;
         feature: string;

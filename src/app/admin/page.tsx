@@ -17,7 +17,7 @@ export default async function AdminPage() {
   let query = supabase
     .from("clients")
     .select(
-      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance",
+      "id, business_name, twilio_phone_number, a2p_status, plan, status, forward_to_phone, dial_timeout_seconds, phone, stripe_customer_id, billing_status, ai_receptionist_enabled, retell_minutes_used_this_month, retell_minutes_allowance, ai_text_assistant_enabled, ai_text_replies_used_this_month, ai_text_replies_allowance",
     )
     .order("business_name", { ascending: true });
   if (agencyId) query = query.eq("agency_id", agencyId);
@@ -106,6 +106,21 @@ export default async function AdminPage() {
                   AI receptionist: {c.retell_minutes_used_this_month.toFixed(1)} /{" "}
                   {c.retell_minutes_allowance.toFixed(0)} min this month
                   {c.retell_minutes_used_this_month > c.retell_minutes_allowance
+                    ? " — over allowance, bill manually"
+                    : ""}
+                </p>
+              ) : null}
+              {c.ai_text_assistant_enabled ? (
+                <p
+                  className={
+                    c.ai_text_replies_used_this_month > c.ai_text_replies_allowance
+                      ? "mt-1 text-xs text-red-600"
+                      : "mt-1 text-xs text-charcoal/50"
+                  }
+                >
+                  AI text assistant: {c.ai_text_replies_used_this_month} /{" "}
+                  {c.ai_text_replies_allowance} replies this month
+                  {c.ai_text_replies_used_this_month > c.ai_text_replies_allowance
                     ? " — over allowance, bill manually"
                     : ""}
                 </p>

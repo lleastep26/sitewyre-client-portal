@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireMembership } from "@/lib/auth/session";
-import { InboxThread } from "@/components/inbox/thread";
+import { InboxThread, type AiThreadState } from "@/components/inbox/thread";
+import { OPEN_LEAD_STATUSES } from "@/lib/leads/lifecycle";
 import { getAppUrl } from "@/lib/supabase/env";
 import { ensureSavedReplies } from "./actions";
 
@@ -17,10 +18,32 @@ export default async function InboxPage({
 
   const { data: contacts } = await supabase
     .from("contacts")
-    .select("id, name, phones, emails")
+    .select("id, name, phones, emails, ai_paused_at, ai_paused_reason")
     .eq("client_id", client.id)
     .order("updated_at", { ascending: false })
     .limit(40);
+
+  // Which threads the AI text assistant is on: only contacts with an open
+  // lead, and only while the thread hasn't been paused.
+  const openLeadContactIds = new Set<string>();
+  if (client.ai_text_assistant_enabled) {
+    const { data: openLeads } = await supabase
+      .from("leads")
+      .select("contact_id")
+      .eq("client_id", client.id)
+      .in("lifecycle_status", OPEN_LEAD_STATUSES);
+    for (const lead of openLeads ?? []) {
+      if (lead.contact_id) openLeadContactIds.add(lead.contact_id);
+    }
+  }
+  function aiStateFor(c: { id: string; ai_paused_at: string | null; ai_paused_reason: string | null }): AiThreadState {
+    if (!client?.ai_text_assistant_enabled) return "off";
+    if (c.ai_paused_at) {
+      const byOwner = c.ai_paused_reason === "owner_replied" || c.ai_paused_reason === "owner_takeover";
+      return byOwner ? "owner" : "needs_you";
+    }
+    return openLeadContactIds.has(c.id) ? "ai" : "off";
+  }
 
   const activeId = params.contact ?? contacts?.[0]?.id;
   const active = contacts?.find((c) => c.id === activeId) ?? null;
@@ -69,6 +92,16 @@ export default async function InboxPage({
                   className={`block rounded-md px-3 py-2 text-sm ${c.id === activeId ? "bg-copper/15 text-copper" : "bg-white/70"}`}
                 >
                   {c.name}
+                  {aiStateFor(c) === "ai" ? (
+                    <span className="ml-1 rounded bg-charcoal/10 px-1 py-0.5 text-[10px] text-charcoal/60">
+                      AI handling
+                    </span>
+                  ) : null}
+                  {aiStateFor(c) === "needs_you" ? (
+                    <span className="ml-1 rounded bg-red-100 px-1 py-0.5 text-[10px] text-red-700">
+                      Needs you
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             ))}
@@ -86,6 +119,7 @@ export default async function InboxPage({
                   : null
               }
               reviewLink={client.google_review_url}
+              aiState={aiStateFor(active)}
               messages={messages ?? []}
               savedReplies={savedReplies ?? []}
             />

@@ -11,6 +11,8 @@ export type SendFunnelMessageParams = {
   from: string;
   body: string;
   contactId?: string | null;
+  /** Marks the logged message as written by the AI text assistant. */
+  aiGenerated?: boolean;
 };
 
 export type SendFunnelMessageResult =
@@ -27,7 +29,7 @@ export async function sendFunnelMessage(
   supabase: SupabaseClient<Database>,
   params: SendFunnelMessageParams,
 ): Promise<SendFunnelMessageResult> {
-  const { clientId, trigger, to, from, body, contactId } = params;
+  const { clientId, trigger, to, from, body, contactId, aiGenerated } = params;
 
   if (await isOptedOut(supabase, clientId, to, contactId)) {
     await logSkippedOptOut(supabase, {
@@ -65,6 +67,7 @@ export async function sendFunnelMessage(
       body,
       status: sms.status,
       external_id: sms.id,
+      ai_generated: aiGenerated ?? false,
     });
   }
 
