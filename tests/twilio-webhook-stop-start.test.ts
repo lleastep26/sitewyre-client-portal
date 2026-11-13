@@ -39,6 +39,9 @@ function makeTable(opts: TableOpts = {}) {
     neq() {
       return chain;
     },
+    in() {
+      return chain;
+    },
     gte() {
       return chain;
     },

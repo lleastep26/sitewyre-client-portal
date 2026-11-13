@@ -28,6 +28,11 @@ import { advanceA2pPipeline, type A2pPipelineState } from "@/lib/a2p/pipeline";
 import { buildA2pBusinessInfo } from "@/lib/a2p/business-info";
 import { decryptEin } from "@/lib/a2p/encryption";
 import { refreshEmailDomain } from "@/lib/email/resend-domains";
+import {
+  isOpenLeadStatus,
+  recordLeadTexted,
+  setLeadLifecycleStatus,
+} from "@/lib/leads/lifecycle";
 
 type LeadEvent = {
   name: "portal/lead.created";
@@ -145,79 +150,132 @@ export const leadAutoReply = inngest.createFunction(
   },
 );
 
-export const leadUnansweredFollowUp = inngest.createFunction(
+const LEAD_FOLLOW_UP_STEP2_TEMPLATE =
+  "Hi {{first_name}}, still here whenever you're ready — just let us know and {{business_name}} will take care of it.";
+const LEAD_FOLLOW_UP_STEP3_TEMPLATE =
+  "Hi {{first_name}}, last check-in from {{business_name}} — we're happy to help whenever the timing's right.";
+
+/**
+ * Replaces lead-unanswered-follow-up (a single +2d text) with a 3-step
+ * drip at +1d/+3d/+7d, then stops. Only step 1 uses the per-client
+ * editable template (Automations → lead_unanswered_follow_up); steps 2-3
+ * use fixed fallback copy, same compromise reviewRequestDrip already
+ * makes for its own steps 2-3.
+ *
+ * cancelOn covers both ways a lead stops being "unanswered": they reply
+ * (portal/lead.replied) or they get booked (portal/lead.booked), either
+ * of which ends this run immediately regardless of which step it's
+ * asleep on.
+ *
+ * This function has a different id than the old lead-unanswered-follow-up
+ * on purpose — removing that export means Inngest's next sync marks it as
+ * no longer part of the app, which cancels any already-sleeping +2d runs
+ * rather than letting them wake into this new code's step shape.
+ */
+export const leadFollowUpSequence = inngest.createFunction(
   {
-    id: "lead-unanswered-follow-up",
+    id: "lead-follow-up-sequence",
     triggers: [{ event: "portal/lead.created" }],
+    cancelOn: [
+      { event: "portal/lead.replied", match: "data.leadId" },
+      { event: "portal/lead.booked", match: "data.leadId" },
+    ],
   },
-  async ({ event, step }: { event: LeadEvent; step: Step }) => {
+  async ({ event, step }: { event: LeadEvent; step: StepWithSleepUntil }) => {
     const { clientId, leadId, phone, name } = event.data;
-    await step.sleep("wait-2d", "2d");
-
     const supabase = createAdminClient();
-    const auto = await getAutomationState(
-      supabase,
-      clientId,
-      "lead_unanswered_follow_up",
-    );
-    if (!auto.enabled) return { skipped: true, reason: "disabled" };
-
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("id, first_response_at, phone")
-      .eq("id", leadId)
-      .maybeSingle();
-    if (!lead || lead.first_response_at) {
-      return { skipped: true, reason: "answered_or_missing" };
-    }
-
-    const { data: client } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", clientId)
-      .single();
-    if (!client?.twilio_phone_number) return { skipped: true };
-
-    await respectQuietHours(step, client.timezone ?? "America/Chicago", "quiet-follow-up");
-
-    const to = normalizePhone(lead.phone || phone);
     const firstName = name.split(" ")[0] ?? name;
-    const body = applyTemplate(
-      auto.templateBody ??
-        `Hi {{first_name}}, just checking in from {{business_name}} — still happy to help whenever you're ready.`,
-      {
-        first_name: firstName,
-        business_name: client.business_name ?? "us",
-      },
-    );
 
-    const a2p = checkA2pGate(client, to);
-    if (!a2p.allowed) {
+    async function logSkip(stepNum: 1 | 2 | 3, reason: string) {
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "lead_unanswered_follow_up",
         status: "skipped",
-        log: { leadId, phone: to, reason: a2p.reason },
+        log: { leadId, step: stepNum, reason },
       });
-      return { skipped: true, reason: a2p.reason };
     }
 
-    await step.run("sms-follow-up", async () =>
-      getSmsProvider().send({
-        to,
-        from: resolveSmsFrom(client)!,
-        body,
-      }),
-    );
+    async function runStep(stepNum: 1 | 2 | 3, fallbackTemplate: string) {
+      const auto = await getAutomationState(
+        supabase,
+        clientId,
+        "lead_unanswered_follow_up",
+      );
+      if (!auto.enabled) {
+        await logSkip(stepNum, "disabled");
+        return false;
+      }
 
-    await step.run("log-follow-up", async () => {
+      const { data: lead } = await supabase
+        .from("leads")
+        .select("id, phone, lifecycle_status")
+        .eq("id", leadId)
+        .maybeSingle();
+      if (!lead || !isOpenLeadStatus(lead.lifecycle_status)) {
+        await logSkip(stepNum, "no_longer_open");
+        return false;
+      }
+
+      const { data: client } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (!client?.twilio_phone_number) {
+        await logSkip(stepNum, "no_twilio_number");
+        return false;
+      }
+
+      const to = normalizePhone(lead.phone || phone);
+      const a2p = checkA2pGate(client, to);
+      if (!a2p.allowed) {
+        await logSkip(stepNum, a2p.reason);
+        return false;
+      }
+
+      const sendAt = nextFunnelSendableAt(new Date(), client.timezone ?? "America/Chicago");
+      if (sendAt.getTime() > Date.now() + 5_000) {
+        await step.sleepUntil(`funnel-quiet-${stepNum}`, sendAt);
+      }
+
+      const template =
+        stepNum === 1
+          ? auto.templateBody ??
+            getDefaultTemplate("lead_unanswered_follow_up") ??
+            fallbackTemplate
+          : fallbackTemplate;
+      const body = applyTemplate(template, {
+        first_name: firstName,
+        business_name: client.business_name ?? "us",
+      });
+
+      await step.run(`sms-follow-up-${stepNum}`, () =>
+        getSmsProvider().send({ to, from: resolveSmsFrom(client)!, body }),
+      );
+
+      if (stepNum === 1) {
+        await setLeadLifecycleStatus(supabase, leadId, "contacted");
+      }
+      await recordLeadTexted(supabase, leadId);
+
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "lead_unanswered_follow_up",
         status: "sent",
-        log: { leadId, phone: to },
+        log: { leadId, step: stepNum, phone: to },
       });
-    });
+
+      return true;
+    }
+
+    await step.sleep("wait-1d", "1d");
+    if (!(await runStep(1, LEAD_FOLLOW_UP_STEP2_TEMPLATE))) return { stopped: true, at: 1 };
+
+    await step.sleep("wait-3d", "2d");
+    if (!(await runStep(2, LEAD_FOLLOW_UP_STEP2_TEMPLATE))) return { stopped: true, at: 2 };
+
+    await step.sleep("wait-7d", "4d");
+    if (!(await runStep(3, LEAD_FOLLOW_UP_STEP3_TEMPLATE))) return { stopped: true, at: 3 };
 
     return { ok: true };
   },
@@ -1281,13 +1339,113 @@ export const reviewBlastContact = inngest.createFunction(
   },
 );
 
+type LeadReactivationContactEvent = {
+  name: "portal/lead_reactivation.contact_started";
+  data: {
+    clientId: string;
+    leadId: string;
+    phone: string;
+    from: string;
+    firstName: string;
+    businessName: string;
+    sendAt: string;
+  };
+};
+
+/**
+ * One-off re-engagement text for a stale lead, paced with the same
+ * planBlastSchedule() 40/day cap the review blast uses. Single send, no
+ * reminder step — re-checks the lead is still open and not opted out
+ * right before sending, since days can pass between scheduling and send.
+ */
+export const leadReactivationContact = inngest.createFunction(
+  {
+    id: "lead-reactivation-contact",
+    triggers: [{ event: "portal/lead_reactivation.contact_started" }],
+    cancelOn: [
+      { event: "portal/lead.replied", match: "data.leadId" },
+      { event: "portal/lead.booked", match: "data.leadId" },
+    ],
+  },
+  async ({
+    event,
+    step,
+  }: {
+    event: LeadReactivationContactEvent;
+    step: StepWithSleepUntil;
+  }) => {
+    const { clientId, leadId, phone, from, firstName, businessName, sendAt } = event.data;
+    const supabase = createAdminClient();
+
+    await step.sleepUntil("wait-send", new Date(sendAt));
+
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id, lifecycle_status")
+      .eq("id", leadId)
+      .maybeSingle();
+    if (!lead || !isOpenLeadStatus(lead.lifecycle_status)) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "lead_reactivation",
+        status: "skipped",
+        log: { leadId, reason: "no_longer_open" },
+      });
+      return { stopped: true, reason: "no_longer_open" };
+    }
+
+    if (await isOptedOut(supabase, clientId, phone, undefined)) {
+      await logSkippedOptOut(supabase, {
+        clientId,
+        trigger: "lead_reactivation",
+        log: { leadId, phone },
+      });
+      return { stopped: true, reason: "opted_out" };
+    }
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("a2p_status, phone")
+      .eq("id", clientId)
+      .maybeSingle();
+    const a2p = checkA2pGate(client, phone);
+    if (!a2p.allowed) {
+      await supabase.from("workflow_runs").insert({
+        client_id: clientId,
+        trigger: "lead_reactivation",
+        status: "skipped",
+        log: { leadId, reason: a2p.reason },
+      });
+      return { stopped: true, reason: a2p.reason };
+    }
+
+    const body = applyTemplate(
+      "Hi {{first_name}}, it's {{business_name}} — still interested in getting this taken care of? Happy to help whenever you're ready.",
+      { first_name: firstName, business_name: businessName },
+    );
+
+    await step.run("send", () => getSmsProvider().send({ to: phone, from, body }));
+    await recordLeadTexted(supabase, leadId);
+
+    await supabase.from("workflow_runs").insert({
+      client_id: clientId,
+      trigger: "lead_reactivation",
+      status: "sent",
+      log: { leadId, phone },
+    });
+
+    return { ok: true };
+  },
+);
+
 export const functions = [
   leadAutoReply,
-  leadUnansweredFollowUp,
+  leadFollowUpSequence,
   leadSlaNudge,
   missedCallTextBack,
   appointmentReminder,
   reviewRequestDrip,
+  leadReactivationContact,
   reviewBlastContact,
   invoiceReminder,
   invoiceFollowUp,

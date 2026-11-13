@@ -130,6 +130,8 @@ export type LeadRow = {
   lost_reason: string | null;
   last_activity_at: string | null;
   first_response_at: string | null;
+  lifecycle_status: "new" | "contacted" | "replied" | "booked" | "no_show" | "lost";
+  last_texted_at: string | null;
   created_at: string;
   updated_at: string | null;
 };

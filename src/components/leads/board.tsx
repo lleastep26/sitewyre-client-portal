@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { moveLead } from "@/app/(app)/leads/actions";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -119,6 +120,12 @@ export function LeadsBoard({
                         {days}d in stage
                         {lead.value != null ? ` · $${Number(lead.value).toLocaleString()}` : ""}
                       </p>
+                      <Link
+                        href={`/leads?view=list&open=${lead.id}`}
+                        className="mt-1 inline-block text-xs text-copper"
+                      >
+                        View timeline →
+                      </Link>
                     </li>
                   );
                 })}

@@ -4,6 +4,7 @@ import { createLeadAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ReactivateOldLeadsButton } from "./reactivate-button";
 
 export default async function LeadsPage({
   searchParams,
@@ -15,7 +16,7 @@ export default async function LeadsPage({
   if (!client) return null;
   const openId = params.open;
 
-  const [{ data: stages }, { data: leads }] = await Promise.all([
+  const [{ data: stages }, { data: leads }, { data: timeline }] = await Promise.all([
     supabase
       .from("pipeline_stages")
       .select("*")
@@ -26,6 +27,14 @@ export default async function LeadsPage({
       .select("*")
       .eq("client_id", client.id)
       .order("created_at", { ascending: false }),
+    openId
+      ? supabase
+          .from("workflow_runs")
+          .select("trigger, status, log, created_at")
+          .eq("client_id", client.id)
+          .contains("log", { leadId: openId })
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: null }),
   ]);
 
   return (
@@ -37,6 +46,8 @@ export default async function LeadsPage({
           Drag cards between stages. Untouched leads turn red after 2 days.
         </p>
       </header>
+
+      <ReactivateOldLeadsButton />
 
       {params.new ? (
         <form action={createLeadAction} className="mx-4 space-y-2 rounded-xl border border-charcoal/10 bg-white p-4">
@@ -65,8 +76,29 @@ export default async function LeadsPage({
             >
               <p className="font-medium">{lead.name}</p>
               <p className="text-xs text-charcoal/60">
-                {lead.phone} · {lead.source ?? "manual"}
+                {lead.phone} · {lead.source ?? "manual"} · {lead.lifecycle_status}
               </p>
+              {lead.id === openId ? (
+                <div className="mt-2 space-y-1 border-t border-charcoal/10 pt-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-charcoal/50">
+                    Workflow timeline
+                  </p>
+                  {(timeline ?? []).length ? (
+                    <ul className="space-y-1">
+                      {(timeline ?? []).map((run, i) => (
+                        <li key={i} className="text-xs text-charcoal/70">
+                          {new Date(run.created_at).toLocaleString()} —{" "}
+                          {run.trigger.replaceAll("_", " ")} ({run.status})
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-charcoal/50">
+                      Nothing logged yet.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </li>
           ))}
           {!leads?.length ? (

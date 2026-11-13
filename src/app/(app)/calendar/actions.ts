@@ -6,6 +6,9 @@ import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { getSmsProvider } from "@/lib/adapters";
+import { setLeadLifecycleStatus } from "@/lib/leads/lifecycle";
+import { applyTemplate } from "@/lib/automations";
 
 export async function createAppointment(formData: FormData) {
   const { supabase, client, user } = await requireMembership();
@@ -97,8 +100,51 @@ export async function updateAppointmentStatus(id: string, status: string) {
     .eq("id", id)
     .eq("client_id", client.id);
   if (error) return { error: error.message };
+
+  if (status === "no_show") {
+    await handleNoShow(supabase, client, id).catch(() => undefined);
+  }
+
   revalidatePath("/calendar");
   return { ok: true };
+}
+
+async function handleNoShow(
+  supabase: Awaited<ReturnType<typeof requireMembership>>["supabase"],
+  client: NonNullable<Awaited<ReturnType<typeof requireMembership>>["client"]>,
+  appointmentId: string,
+) {
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("contact_id, title")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  if (!appointment?.contact_id) return;
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("client_id", client.id)
+    .eq("contact_id", appointment.contact_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lead) await setLeadLifecycleStatus(supabase, lead.id, "no_show");
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("phones")
+    .eq("id", appointment.contact_id)
+    .maybeSingle();
+  const phone = contact?.phones?.[0];
+  const from = resolveSmsFrom(client);
+  if (!phone || !from) return;
+
+  const body = applyTemplate(
+    "Hi, we missed you for your {{title}} appointment with {{business_name}} — give us a call to reschedule.",
+    { title: appointment.title ?? "scheduled", business_name: client.business_name ?? "us" },
+  );
+  await getSmsProvider().send({ to: phone, from, body });
 }
 
 export async function ensureCalendarAvailability() {

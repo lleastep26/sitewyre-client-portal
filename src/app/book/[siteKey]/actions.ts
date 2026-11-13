@@ -8,6 +8,8 @@ import { enqueueAppointmentSms } from "@/lib/scheduling/reminders";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { sendPushToClient } from "@/lib/push/web-push";
 import { resolveSmsFrom } from "@/lib/a2p/sending";
+import { handleLeadBookedForContact } from "@/lib/leads/lifecycle";
+import { inngest } from "@/lib/inngest/client";
 
 export async function bookAppointment(siteKey: string, formData: FormData) {
   const supabase = createAdminClient();
@@ -81,16 +83,28 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
   });
 
   const title = service.name ?? "Booking";
-  await supabase.from("appointments").insert({
-    client_id: client.id,
-    contact_id: contact.id,
-    service_id: service.id,
-    title,
-    start_at: start.toISOString(),
-    end_at: end.toISOString(),
-    status: "scheduled",
-    assignee_ids: client.user_id ? [client.user_id] : [],
-  });
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .insert({
+      client_id: client.id,
+      contact_id: contact.id,
+      service_id: service.id,
+      title,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+      status: "scheduled",
+      assignee_ids: client.user_id ? [client.user_id] : [],
+    })
+    .select("id")
+    .single();
+
+  if (appointment) {
+    await handleLeadBookedForContact(
+      supabase,
+      { clientId: client.id, contactId: contact.id, appointmentId: appointment.id },
+      (event) => inngest.send(event),
+    );
+  }
 
   await supabase.from("jobs").insert({
     client_id: client.id,

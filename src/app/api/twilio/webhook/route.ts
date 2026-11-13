@@ -5,6 +5,13 @@ import { sendPushToClient } from "@/lib/push/web-push";
 import { normalizePhone } from "@/lib/utils";
 import { addOptOut, removeOptOut } from "@/lib/funnels/opt-out";
 import { validateTwilioSignature } from "@/lib/twilio/validate";
+import { getSmsProvider } from "@/lib/adapters";
+import { resolveSmsFrom } from "@/lib/a2p/sending";
+import {
+  findOpenLeadForPhone,
+  isOwnerPhone,
+  setLeadLifecycleStatus,
+} from "@/lib/leads/lifecycle";
 
 // Exact whole-message match only, trimmed + case-insensitive — "Stop by
 // Thursday" must never match. START/UNSTOP are the opt-back-in keywords;
@@ -69,6 +76,34 @@ export async function POST(request: Request) {
       phone: from,
       source: "sms",
     });
+
+    // Lead-reply detection: cancels that lead's follow-up drip and alerts
+    // the owner. Never triggered by the owner's own phone texting in
+    // (e.g. replying to their own lead-alert SMS) — that's not a lead
+    // replying.
+    if (!isOwnerPhone(client, from)) {
+      const openLead = await findOpenLeadForPhone(supabase, client.id, from);
+      if (openLead) {
+        await setLeadLifecycleStatus(supabase, openLead.id, "replied");
+        await inngest
+          .send({
+            name: "portal/lead.replied",
+            data: { clientId: client.id, leadId: openLead.id },
+          })
+          .catch(() => undefined);
+
+        const ownerFrom = resolveSmsFrom(client);
+        if (client.phone && ownerFrom) {
+          await getSmsProvider()
+            .send({
+              to: normalizePhone(client.phone),
+              from: ownerFrom,
+              body: `${openLead.name} replied: ${body.slice(0, 120)} — reply in your portal inbox.`,
+            })
+            .catch(() => undefined);
+        }
+      }
+    }
 
     const upper = body.trim().toUpperCase();
     if (STOP_KEYWORDS.includes(upper)) {
