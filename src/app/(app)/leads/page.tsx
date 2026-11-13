@@ -89,7 +89,7 @@ export default async function LeadsPage({
                         <li key={i} className="text-xs text-charcoal/70">
                           {new Date(run.created_at).toLocaleString()} —{" "}
                           {run.trigger.replaceAll("_", " ")} ({run.status})
-                          <TimelineDetail log={run.log} />
+                          <TimelineDetail log={run.log} status={run.status} />
                         </li>
                       ))}
                     </ul>
@@ -153,19 +153,41 @@ function Empty({
   );
 }
 
-/** Extra detail for timeline entries that carry it — today, the AI
- * receptionist's call summary and recording link. */
-function TimelineDetail({ log }: { log: unknown }) {
-  const entry = (log ?? {}) as { summary?: unknown; recordingUrl?: unknown };
+function blockReasonLabel(reason: string): string {
+  if (reason === "no_number") return "this business has no texting number yet";
+  if (reason === "no_phone") return "the lead has no phone number";
+  if (reason === "opted_out") return "the customer opted out of texts";
+  if (reason.startsWith("a2p_")) {
+    return `texting registration isn't approved yet (${reason.slice(4).replaceAll("_", " ")})`;
+  }
+  return reason.replaceAll("_", " ");
+}
+
+/** Extra detail for timeline entries that carry it: why a text was not
+ * sent, and the AI receptionist's call summary and recording link. */
+function TimelineDetail({ log, status }: { log: unknown; status: string }) {
+  const entry = (log ?? {}) as {
+    summary?: unknown;
+    recordingUrl?: unknown;
+    sms?: unknown;
+    reason?: unknown;
+  };
   const summary = typeof entry.summary === "string" ? entry.summary : null;
   const recordingUrl =
     typeof entry.recordingUrl === "string" && entry.recordingUrl.startsWith("https://")
       ? entry.recordingUrl
       : null;
-  if (!summary && !recordingUrl) return null;
+  const blocked =
+    typeof entry.sms === "string" && entry.sms !== "sent"
+      ? entry.sms
+      : status === "skipped" && typeof entry.reason === "string"
+        ? entry.reason
+        : null;
+  if (!summary && !recordingUrl && !blocked) return null;
   return (
     <span className="mt-0.5 block text-charcoal/60">
       {summary}
+      {blocked ? `Text not sent: ${blockReasonLabel(blocked)}.` : null}
       {recordingUrl ? (
         <>
           {" "}

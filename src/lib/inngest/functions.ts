@@ -113,7 +113,20 @@ export const leadAutoReply = inngest.createFunction(
 
     const sms = getSmsProvider();
     const to = normalizePhone(phone);
-    if (to && client.twilio_phone_number && checkA2pGate(client, to).allowed) {
+
+    // Why the instant text did or didn't go out — recorded on the lead's
+    // timeline, so a blocked text never shows up as "sent".
+    const a2p = checkA2pGate(client, to);
+    const smsOutcome = !to
+      ? "no_phone"
+      : !client.twilio_phone_number
+        ? "no_number"
+        : (await isOptedOut(supabase, clientId, to))
+          ? "opted_out"
+          : !a2p.allowed
+            ? a2p.reason
+            : "sent";
+    if (smsOutcome === "sent") {
       await step.run("sms-homeowner", async () =>
         sms.send({ to, from: resolveSmsFrom(client) ?? undefined, body }),
       );
@@ -145,8 +158,8 @@ export const leadAutoReply = inngest.createFunction(
       await supabase.from("workflow_runs").insert({
         client_id: clientId,
         trigger: "lead_auto_reply",
-        status: "sent",
-        log: { leadId, phone, email },
+        status: smsOutcome === "sent" || email ? "sent" : "skipped",
+        log: { leadId, phone, email, sms: smsOutcome, emailSent: Boolean(email) },
       });
     });
 
