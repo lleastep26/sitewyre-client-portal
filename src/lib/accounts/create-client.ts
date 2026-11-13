@@ -26,7 +26,15 @@ export type CreateClientResult =
 export async function createClientAccount(
   supabase: Admin,
   input: AccountInput,
-  options: { agencyId?: string; actorId?: string; auditVia: string },
+  options: {
+    agencyId?: string;
+    actorId?: string;
+    auditVia: string;
+    /** Never buy a Twilio number as part of creating the account. The
+     * admin "Add client" form sets this: buying a number costs money and
+     * has its own button with a price shown first. */
+    skipNumberPurchase?: boolean;
+  },
 ): Promise<CreateClientResult> {
   const agencyId = options.agencyId ?? SITEWYRE_AGENCY_ID;
   const siteKey = nanoid(24);
@@ -61,7 +69,7 @@ export async function createClientAccount(
   let twilioPhone: string | null = null;
   let twilioSid: string | null = null;
   try {
-    if (input.area_code || input.phone) {
+    if (!options.skipNumberPurchase && (input.area_code || input.phone)) {
       const area =
         input.area_code ??
         normalizePhone(input.phone ?? "").replace("+1", "").slice(0, 3);

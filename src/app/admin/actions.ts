@@ -128,6 +128,7 @@ export async function addClient(
     agencyId: agencyId ?? SITEWYRE_AGENCY_ID,
     actorId: user.id,
     auditVia: "admin_add_client",
+    skipNumberPurchase: true,
   });
   if ("error" in result) return result;
 
