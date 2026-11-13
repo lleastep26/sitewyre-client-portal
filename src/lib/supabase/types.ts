@@ -209,6 +209,7 @@ export type AppointmentRow = {
   end_at: string;
   status: string;
   title: string | null;
+  created_at: string;
   external_event_id: string | null;
   external_calendar_provider: "google" | "outlook" | null;
 };

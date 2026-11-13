@@ -33,6 +33,7 @@ import {
   recordLeadTexted,
   setLeadLifecycleStatus,
 } from "@/lib/leads/lifecycle";
+import { recordAiCallOutcome, type AiCallOutcomeInput } from "@/lib/retell/call-summary";
 import {
   aiReplySendTime,
   generateAiTextReply,
@@ -50,6 +51,9 @@ type LeadEvent = {
     phone: string;
     email?: string | null;
     name: string;
+    /** Set for leads created on an AI-handled call, which get their own
+     * single after-call text instead of the "New lead" alert. */
+    skipOwnerAlert?: boolean;
   };
 };
 
@@ -79,7 +83,7 @@ async function respectQuietHours(
 export const leadAutoReply = inngest.createFunction(
   { id: "lead-auto-reply", triggers: [{ event: "portal/lead.created" }] },
   async ({ event, step }: { event: LeadEvent; step: Step }) => {
-    const { clientId, leadId, phone, email, name } = event.data;
+    const { clientId, leadId, phone, email, name, skipOwnerAlert } = event.data;
     await step.sleep("wait-brief", "2s");
 
     const supabase = createAdminClient();
@@ -128,7 +132,7 @@ export const leadAutoReply = inngest.createFunction(
       );
     }
 
-    if (client.phone) {
+    if (client.phone && !skipOwnerAlert) {
       await step.run("alert-owner-sms", async () =>
         sms.send({
           to: normalizePhone(client.phone!),
@@ -1672,6 +1676,29 @@ export const aiTextReply = inngest.createFunction(
   },
 );
 
+/**
+ * Safety net for the after-call owner text. Retell normally sends
+ * call_analyzed with a summary shortly after a call ends, and the webhook
+ * records the call then. If that never arrives, this records it three
+ * minutes later without a summary, so the owner still gets their one text.
+ * recordAiCallOutcome ignores a call that's already been recorded.
+ */
+export const aiCallSummaryFallback = inngest.createFunction(
+  { id: "ai-call-summary-fallback", triggers: [{ event: "portal/ai-call.ended" }] },
+  async ({
+    event,
+    step,
+  }: {
+    event: { data: Omit<AiCallOutcomeInput, "summary"> };
+    step: Step;
+  }) => {
+    await step.sleep("wait-for-analysis", "3m");
+    return step.run("record-if-missing", () =>
+      recordAiCallOutcome(createAdminClient(), { ...event.data, summary: null }),
+    );
+  },
+);
+
 export const functions = [
   leadAutoReply,
   leadFollowUpSequence,
@@ -1688,6 +1715,7 @@ export const functions = [
   monthlyResultsEmail,
   retellMinutesMonthlyReset,
   aiTextReply,
+  aiCallSummaryFallback,
   healthMonitor,
   emailDomainVerificationPoll,
   a2pPipelinePoll,

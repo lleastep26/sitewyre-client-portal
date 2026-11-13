@@ -216,13 +216,14 @@ export async function bookAppointmentForCustomer(
     }).catch(() => undefined);
   }
 
-  if (client.phone) {
-    const who = opts.source === "ai_receptionist" ? "AI receptionist" : "AI text assistant";
+  // A phone booking is reported in the single after-call text instead
+  // (src/lib/retell/call-summary.ts), so the owner gets one text per call.
+  if (client.phone && opts.source === "ai_text_assistant") {
     await getSmsProvider()
       .send({
         to: normalizePhone(client.phone),
         from: from ?? undefined,
-        body: `${who} booked ${customerName}${customerPhone ? ` (${customerPhone})` : ""}: ${service.name}, ${local}.`,
+        body: `AI text assistant booked ${customerName}${customerPhone ? ` (${customerPhone})` : ""}: ${service.name}, ${local}.`,
       })
       .catch(() => undefined);
   }

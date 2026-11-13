@@ -5,6 +5,7 @@ import { requireMembership } from "@/lib/auth/session";
 import { getAiProvider } from "@/lib/adapters";
 import { sendInboxMessageForClient } from "@/lib/inbox/send";
 import { inngest } from "@/lib/inngest/client";
+import { AI_HANDED_BACK_ACTIVITY } from "@/lib/assistant/constants";
 
 const DEFAULT_REPLIES = [
   {
@@ -132,6 +133,13 @@ export async function handBackToAi(contactId: string) {
     .eq("id", contactId)
     .eq("client_id", client.id);
   if (error) return { error: error.message };
+  // Marks the moment of hand-back: the AI's eight-reply cap counts from here.
+  await supabase.from("activities").insert({
+    client_id: client.id,
+    contact_id: contactId,
+    type: AI_HANDED_BACK_ACTIVITY,
+    payload: {},
+  });
   revalidatePath("/inbox");
   return { ok: true as const };
 }

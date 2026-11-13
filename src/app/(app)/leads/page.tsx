@@ -89,6 +89,7 @@ export default async function LeadsPage({
                         <li key={i} className="text-xs text-charcoal/70">
                           {new Date(run.created_at).toLocaleString()} —{" "}
                           {run.trigger.replaceAll("_", " ")} ({run.status})
+                          <TimelineDetail log={run.log} />
                         </li>
                       ))}
                     </ul>
@@ -149,5 +150,30 @@ function Empty({
         {cta} →
       </a>
     </div>
+  );
+}
+
+/** Extra detail for timeline entries that carry it — today, the AI
+ * receptionist's call summary and recording link. */
+function TimelineDetail({ log }: { log: unknown }) {
+  const entry = (log ?? {}) as { summary?: unknown; recordingUrl?: unknown };
+  const summary = typeof entry.summary === "string" ? entry.summary : null;
+  const recordingUrl =
+    typeof entry.recordingUrl === "string" && entry.recordingUrl.startsWith("https://")
+      ? entry.recordingUrl
+      : null;
+  if (!summary && !recordingUrl) return null;
+  return (
+    <span className="mt-0.5 block text-charcoal/60">
+      {summary}
+      {recordingUrl ? (
+        <>
+          {" "}
+          <a href={recordingUrl} target="_blank" rel="noopener noreferrer" className="text-copper underline">
+            Listen to recording
+          </a>
+        </>
+      ) : null}
+    </span>
   );
 }

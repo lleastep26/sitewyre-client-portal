@@ -15,6 +15,7 @@ import {
   buildTextAssistantPrompt,
 } from "@/lib/business-knowledge/summary";
 import { bookAppointmentForCustomer, checkAvailabilityForService } from "./booking";
+import { AI_HANDED_BACK_ACTIVITY } from "./constants";
 import { detectHandoffKeyword, type HandoffReason } from "./guards";
 import { runTextAssistant, type AssistantOutcome, type ThreadMessage } from "./text-assistant";
 
@@ -123,12 +124,23 @@ export async function loadAiTextContext(
   // Someone (the owner, or an earlier run) already answered it.
   if (lastInboundIndex !== messages.length - 1) return { skip: "already_answered" };
 
-  // AI replies since the owner last texted in this thread themselves.
+  // AI replies since the owner last texted in this thread themselves, or
+  // last handed it back to the AI — whichever is more recent.
+  const { data: handedBack } = await supabase
+    .from("activities")
+    .select("occurred_at")
+    .eq("contact_id", opts.contactId)
+    .eq("type", AI_HANDED_BACK_ACTIVITY)
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const countFrom = handedBack ? new Date(handedBack.occurred_at).getTime() : 0;
+
   let aiReplyCount = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i]!;
     if (m.direction !== "outbound") continue;
-    if (!m.ai_generated) break;
+    if (!m.ai_generated || new Date(m.created_at).getTime() <= countFrom) break;
     aiReplyCount += 1;
   }
 

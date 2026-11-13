@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 let fakeClient: { id: string; ai_text_assistant_enabled: boolean } | null;
 let contactUpdates: { patch: unknown; filters: [string, string][] }[];
 let sentEvents: unknown[];
+let activitiesInserted: unknown[];
 const sendInboxMessageForClient = vi.fn();
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -19,6 +20,14 @@ vi.mock("@/lib/inngest/client", () => ({
 
 const fakeSupabase = {
   from(table: string) {
+    if (table === "activities") {
+      return {
+        insert: async (row: unknown) => {
+          activitiesInserted.push(row);
+          return { error: null };
+        },
+      };
+    }
     if (table !== "contacts") throw new Error(`unexpected table ${table}`);
     return {
       update(patch: unknown) {
@@ -47,6 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fakeClient = { id: "client1", ai_text_assistant_enabled: true };
   contactUpdates = [];
+  activitiesInserted = [];
   sentEvents = [];
   sendInboxMessageForClient.mockResolvedValue({ ok: true });
 });
@@ -102,6 +112,10 @@ describe("takeOverThread / handBackToAi", () => {
     const { handBackToAi } = await import("@/app/(app)/inbox/actions");
     expect(await handBackToAi("contact1")).toEqual({ ok: true });
     expect(contactUpdates[0]!.patch).toEqual({ ai_paused_at: null, ai_paused_reason: null });
+    // Recorded so the AI's eight-reply cap starts fresh from the hand-back.
+    expect(activitiesInserted).toEqual([
+      { client_id: "client1", contact_id: "contact1", type: "ai_thread_handed_back", payload: {} },
+    ]);
     expect(contactUpdates[0]!.filters).toEqual([
       ["id", "contact1"],
       ["client_id", "client1"],

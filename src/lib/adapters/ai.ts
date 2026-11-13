@@ -1,37 +1,41 @@
+import Anthropic from "@anthropic-ai/sdk";
+import {
+  AI_TEXT_MODEL,
+  getAnthropicClient,
+  hasAnthropicKey,
+  supportsServerSideFallback,
+} from "@/lib/integrations/anthropic";
 import type { AiProvider } from "./types";
 
+const FALLBACK_SUGGESTION = "Thanks for reaching out — we'll get back to you shortly.";
+
 export class ClaudeAiProvider implements AiProvider {
+  /** The inbox "AI suggest" button. Uses the same model setting as the AI
+   * text assistant (AI_TEXT_MODEL); the owner reviews and sends the draft. */
   async suggestReply(context: string): Promise<string> {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return "Thanks for reaching out — we'll get back to you shortly.";
+    if (!hasAnthropicKey()) return FALLBACK_SUGGESTION;
+    try {
+      const response = await getAnthropicClient().beta.messages.create({
+        model: AI_TEXT_MODEL,
+        max_tokens: 16000,
+        output_config: { effort: "low" },
+        ...(supportsServerSideFallback(AI_TEXT_MODEL)
+          ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+          : {}),
+        system:
+          "You draft short SMS replies for a home-service contractor to send to a customer. Reply with the message text only: plain text, under 300 characters, no quotes around it, no prices or promised times that aren't in the conversation.",
+        messages: [{ role: "user", content: `Draft the contractor's next reply. Conversation so far:\n${context}` }],
+      });
+      if (response.stop_reason === "refusal") return FALLBACK_SUGGESTION;
+      const text = response.content
+        .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
+      return text || FALLBACK_SUGGESTION;
+    } catch {
+      return FALLBACK_SUGGESTION;
     }
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `Suggest a short SMS reply a contractor can send. Context:\n${context}`,
-          },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      return "Thanks for reaching out — we'll get back to you shortly.";
-    }
-    const data = (await res.json()) as {
-      content?: { type: string; text?: string }[];
-    };
-    return data.content?.find((c) => c.type === "text")?.text?.trim()
-      ?? "Thanks for reaching out — we'll get back to you shortly.";
   }
 
   async summarize(text: string): Promise<string> {
@@ -50,6 +54,6 @@ export class FakeAiProvider implements AiProvider {
 }
 
 export function getAiProvider(): AiProvider {
-  if (process.env.ANTHROPIC_API_KEY) return new ClaudeAiProvider();
+  if (hasAnthropicKey()) return new ClaudeAiProvider();
   return new FakeAiProvider();
 }

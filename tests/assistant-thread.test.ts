@@ -24,6 +24,7 @@ let contactRow: Row | null;
 let messageRows: Row[];
 let clientUpdates: Row[];
 let contactUpdates: Row[];
+let handedBackAt: string | null;
 
 function fakeSupabase() {
   return {
@@ -65,6 +66,16 @@ function fakeSupabase() {
         };
         return chain;
       }
+      if (table === "activities") {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          maybeSingle: async () => ({ data: handedBackAt ? { occurred_at: handedBackAt } : null }),
+        };
+        return chain;
+      }
       if (table === "leads") {
         return {
           select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { message: "Clogged kitchen drain" } }) }) }),
@@ -85,6 +96,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clientUpdates = [];
   contactUpdates = [];
+  handedBackAt = null;
   clientRow = {
     id: "client1",
     business_name: "Acme",
@@ -195,6 +207,19 @@ describe("loadAiTextContext", () => {
       msg("inbound", "q3", { external_id: "SM2" }),
     ];
     expect(await load()).toMatchObject({ aiReplyCount: 2 });
+  });
+
+  it("starts the count again when the owner hands the thread back to the AI", async () => {
+    messageRows = [
+      msg("outbound", "a1", { ai_generated: true, created_at: "2026-11-13T15:00:00.000Z" }),
+      msg("inbound", "q2", { created_at: "2026-11-13T15:01:00.000Z" }),
+      msg("outbound", "a2", { ai_generated: true, created_at: "2026-11-13T15:02:00.000Z" }),
+      msg("inbound", "q3", { created_at: "2026-11-13T16:01:00.000Z" }),
+      msg("outbound", "a3", { ai_generated: true, created_at: "2026-11-13T16:02:00.000Z" }),
+      msg("inbound", "q4", { external_id: "SM2", created_at: "2026-11-13T16:03:00.000Z" }),
+    ];
+    handedBackAt = "2026-11-13T16:00:00.000Z";
+    expect(await load()).toMatchObject({ aiReplyCount: 1 });
   });
 });
 

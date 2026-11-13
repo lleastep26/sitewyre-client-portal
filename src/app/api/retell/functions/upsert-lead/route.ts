@@ -83,7 +83,8 @@ export async function POST(request: Request) {
   await inngest
     .send({
       name: "portal/lead.created",
-      data: { clientId, leadId: lead.id, phone: callerPhone, name: callerName },
+      // The owner gets one text per call, after it ends.
+      data: { clientId, leadId: lead.id, phone: callerPhone, name: callerName, skipOwnerAlert: true },
     })
     .catch(() => undefined);
 

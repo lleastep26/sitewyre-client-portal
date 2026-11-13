@@ -113,7 +113,7 @@ export async function createRetellAgent(opts: {
     voice_id: process.env.RETELL_VOICE_ID || DEFAULT_RETELL_VOICE_ID,
     agent_name: opts.agentName,
     webhook_url: opts.webhookUrl,
-    webhook_events: ["call_started", "call_ended"],
+    webhook_events: ["call_started", "call_ended", "call_analyzed"],
   });
   return { llmId: llm.llm_id, agentId: agent.agent_id };
 }
