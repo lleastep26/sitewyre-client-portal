@@ -87,7 +87,10 @@ export default async function LeadsPage({
                     <ul className="space-y-1">
                       {(timeline ?? []).map((run, i) => (
                         <li key={i} className="text-xs text-charcoal/70">
-                          {new Date(run.created_at).toLocaleString()} —{" "}
+                          {new Date(run.created_at).toLocaleString("en-US", {
+                            timeZone: client.timezone ?? "America/Chicago",
+                          })}{" "}
+                          —{" "}
                           {run.trigger.replaceAll("_", " ")} ({run.status})
                           <TimelineDetail log={run.log} status={run.status} />
                         </li>
