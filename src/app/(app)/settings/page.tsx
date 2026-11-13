@@ -18,9 +18,11 @@ import { BusinessProfileTab } from "./business-profile-tab";
 import { PhoneTab } from "./phone-tab";
 import { EmailTab } from "./email-tab";
 import { A2pTab } from "./a2p-tab";
+import { BusinessKnowledgeTab } from "./business-knowledge-tab";
 import { maskEin } from "@/lib/a2p/encryption";
 import type { A2pPipelineState } from "@/lib/a2p/trust-hub";
 import type { EmailDnsRecord } from "@/lib/email/resend-domains";
+import { getTradePreset } from "@/lib/trade-presets";
 import {
   ensureDefaultAvailability,
   weekdayLabel,
@@ -163,6 +165,12 @@ export default async function SettingsPage({
     .select("id, name, duration_minutes, default_price, bookable_online")
     .eq("client_id", client.id)
     .order("name");
+
+  const { data: faqRows } = await supabase
+    .from("client_faqs")
+    .select("id, question, answer")
+    .eq("client_id", client.id)
+    .order("position", { ascending: true });
 
   const canEditBusinessProfile = role === "owner" || role === "sitewyre_admin";
 
@@ -502,6 +510,37 @@ export default async function SettingsPage({
     </Card>
   );
 
+  const hoursSummary = availability.length
+    ? availability
+        .map((a) => `${weekdayLabel(a.weekday)}: ${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`)
+        .join("\n")
+    : "No business hours set.";
+  const servicesOfferedPlaceholder = getTradePreset(client.trade ?? "other")
+    .services.map((s) => s.name)
+    .join(", ");
+
+  const businessKnowledgeTab = (
+    <Card>
+      <CardTitle>Business knowledge</CardTitle>
+      <CardDescription className="mt-1">
+        What the AI receptionist, text assistant and chat widget will know
+        about this business.
+      </CardDescription>
+      <div className="mt-3">
+        <BusinessKnowledgeTab
+          canEdit={canEditBusinessProfile}
+          serviceArea={client.service_area}
+          servicesOffered={client.services_offered}
+          servicesOfferedPlaceholder={servicesOfferedPlaceholder}
+          hoursSummary={hoursSummary}
+          afterHoursRules={client.after_hours_rules}
+          aiNeverSay={client.ai_never_say}
+          faqs={faqRows ?? []}
+        />
+      </div>
+    </Card>
+  );
+
   return (
     <div className="space-y-4 px-4 pb-10">
       <header>
@@ -516,6 +555,7 @@ export default async function SettingsPage({
           { id: "phone", label: "Phone", content: phoneTab },
           { id: "a2p", label: "Texting registration", content: a2pTab },
           { id: "email", label: "Email", content: emailTab },
+          { id: "knowledge", label: "Business knowledge", content: businessKnowledgeTab },
         ]}
       />
     </div>

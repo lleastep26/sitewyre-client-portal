@@ -1,0 +1,69 @@
+import { weekdayLabel, type AvailabilityRow } from "@/lib/scheduling/availability";
+import type { ClientFaqRow, ClientRow, ServiceRow } from "@/lib/supabase/types";
+
+export type BusinessKnowledgeInput = {
+  client: Pick<
+    ClientRow,
+    | "business_name"
+    | "trade"
+    | "service_area"
+    | "services_offered"
+    | "after_hours_rules"
+    | "ai_never_say"
+  >;
+  bookableServices: Pick<ServiceRow, "name" | "duration_minutes">[];
+  availability: Pick<AvailabilityRow, "weekday" | "start_time" | "end_time">[];
+  faqs: Pick<ClientFaqRow, "question" | "answer">[];
+};
+
+function formatHours(availability: BusinessKnowledgeInput["availability"]): string {
+  if (!availability.length) return "No business hours set.";
+  return [...availability]
+    .sort((a, b) => a.weekday - b.weekday)
+    .map((a) => `${weekdayLabel(a.weekday)}: ${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`)
+    .join("\n");
+}
+
+/**
+ * The single source of business context for the AI receptionist, text
+ * assistant and chat widget (Blocks 6-8) — nothing consumes this yet,
+ * this just builds it correctly from the Business knowledge page.
+ */
+export function buildBusinessKnowledgeSummary(input: BusinessKnowledgeInput): string {
+  const { client, bookableServices, availability, faqs } = input;
+  const sections: string[] = [];
+
+  sections.push(`Business: ${client.business_name ?? "Unknown"}`);
+  if (client.service_area) sections.push(`Service area: ${client.service_area}`);
+
+  if (client.services_offered) {
+    sections.push(`Services offered:\n${client.services_offered}`);
+  }
+
+  if (bookableServices.length) {
+    sections.push(
+      "Bookable appointment types:\n" +
+        bookableServices
+          .map((s) => `- ${s.name} (${s.duration_minutes} min)`)
+          .join("\n"),
+    );
+  }
+
+  sections.push(`Business hours:\n${formatHours(availability)}`);
+
+  if (client.after_hours_rules) {
+    sections.push(`After-hours rules:\n${client.after_hours_rules}`);
+  }
+
+  if (faqs.length) {
+    sections.push(
+      "FAQs:\n" + faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n"),
+    );
+  }
+
+  if (client.ai_never_say) {
+    sections.push(`The AI must never say:\n${client.ai_never_say}`);
+  }
+
+  return sections.join("\n\n");
+}

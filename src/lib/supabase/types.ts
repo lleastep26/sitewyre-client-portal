@@ -64,6 +64,19 @@ export type ClientRow = {
   email_reply_to: string | null;
   stripe_connect_account_id: string | null;
   setup_checklist: Record<string, boolean> | null;
+  services_offered: string | null;
+  after_hours_rules: string | null;
+  ai_never_say: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type ClientFaqRow = {
+  id: string;
+  client_id: string;
+  question: string;
+  answer: string;
+  position: number;
   created_at: string;
   updated_at: string | null;
 };
@@ -311,6 +324,7 @@ export type Database = {
         created_at: string;
         updated_at: string | null;
       }>;
+      client_faqs: TableDef<ClientFaqRow>;
       plan_features: TableDef<{
         plan: string;
         feature: string;
