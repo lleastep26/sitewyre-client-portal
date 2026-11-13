@@ -77,7 +77,7 @@ describe("POST /api/twilio/voice", () => {
     );
     const body = await res.text();
     expect(body).toContain('<Dial timeout="15"');
-    expect(body).toContain("<Number>+15550009999</Number>");
+    expect(body).toContain(">+15550009999</Number>");
     expect(body).toContain('action="http://localhost:3000/api/twilio/webhook"');
   });
 
@@ -123,7 +123,7 @@ describe("POST /api/twilio/voice", () => {
     const { POST } = await import("@/app/api/twilio/voice/route");
     const res = await POST(formRequest({ To: "+15551234567", From: "+15559876543", CallSid: "CA1" }));
     const body = await res.text();
-    expect(body).toContain("<Number>+15550009999</Number>");
+    expect(body).toContain(">+15550009999</Number>");
     expect(registerRetellPhoneCall).not.toHaveBeenCalled();
   });
 
@@ -165,7 +165,7 @@ describe("POST /api/twilio/voice", () => {
     const { POST } = await import("@/app/api/twilio/voice/route");
     const res = await POST(formRequest({ To: "+15551234567", From: "+15559876543", CallSid: "CA1" }));
     const body = await res.text();
-    expect(body).toContain("<Number>+15550009999</Number>");
+    expect(body).toContain(">+15550009999</Number>");
     expect(registerRetellPhoneCall).not.toHaveBeenCalled();
   });
 

@@ -10,6 +10,7 @@ import { resolveSmsFrom } from "@/lib/a2p/sending";
 import { registerRetellPhoneCall, retellSipUri } from "@/lib/integrations/retell";
 import { getAppUrl } from "@/lib/supabase/env";
 import { checkA2pGate } from "@/lib/funnels/a2p-gate";
+import { ownerAcceptedCall } from "@/lib/twilio/call-screen";
 import {
   findOpenLeadForPhone,
   isOwnerPhone,
@@ -61,8 +62,14 @@ export async function POST(request: Request) {
   // of just hanging up; missedCallTextBack (30s later) checks whether the
   // handoff actually connected before deciding whether to still text back.
   const dialCallStatus = params.get("DialCallStatus");
-  const ownerDidNotAnswer =
+  let ownerDidNotAnswer =
     dialCallStatus === "no-answer" || dialCallStatus === "busy" || dialCallStatus === "failed";
+  // The owner's phone was answered, but that may have been its voicemail.
+  // Only a call where someone pressed 1 at the prompt counts as answered
+  // (see call-screen.ts); anything else is handled as unanswered.
+  if (callSid && (dialCallStatus === "completed" || dialCallStatus === "answered")) {
+    ownerDidNotAnswer = !(await ownerAcceptedCall(supabase, client.id, callSid));
+  }
   if (callSid && (callStatus === "no-answer" || callStatus === "busy" || ownerDidNotAnswer)) {
     await supabase.from("calls").insert({
       client_id: client.id,
