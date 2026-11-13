@@ -6,6 +6,8 @@ export type HealthChecks = {
   resend: boolean;
   inngest: boolean;
   vapid: boolean;
+  anthropic: boolean;
+  retell: boolean;
 };
 
 export function buildHealthChecks(
@@ -26,6 +28,8 @@ export function buildHealthChecks(
         env.VAPID_PRIVATE_KEY &&
         env.VAPID_SUBJECT,
     ),
+    anthropic: Boolean(env.ANTHROPIC_API_KEY),
+    retell: Boolean(env.RETELL_API_KEY),
   };
 }
 
@@ -37,4 +41,6 @@ export const HEALTH_CHECK_LABELS: Record<keyof HealthChecks, string> = {
   resend: "Resend email",
   inngest: "Inngest",
   vapid: "Web push (VAPID)",
+  anthropic: "Claude (AI text assistant and chat widget)",
+  retell: "Retell (AI receptionist)",
 };

@@ -11,6 +11,8 @@ describe("buildHealthChecks", () => {
       resend: false,
       inngest: false,
       vapid: false,
+      anthropic: false,
+      retell: false,
     });
   });
 
@@ -27,6 +29,8 @@ describe("buildHealthChecks", () => {
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: "pub",
       VAPID_PRIVATE_KEY: "priv",
       VAPID_SUBJECT: "mailto:ops@example.com",
+      ANTHROPIC_API_KEY: "sk-ant-test",
+      RETELL_API_KEY: "key_test",
     });
     expect(checks).toEqual({
       supabase: true,
@@ -36,6 +40,8 @@ describe("buildHealthChecks", () => {
       resend: true,
       inngest: true,
       vapid: true,
+      anthropic: true,
+      retell: true,
     });
   });
 
