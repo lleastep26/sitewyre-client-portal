@@ -176,8 +176,6 @@ describe("addClient", () => {
         agencyId: "b39e554f-05e0-488f-8654-1ae3db73f15a",
         actorId: "admin1",
         auditVia: "admin_add_client",
-        // Entering a phone number must never buy a Twilio number.
-        skipNumberPurchase: true,
       }),
     );
   });

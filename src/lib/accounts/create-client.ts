@@ -4,7 +4,7 @@ import type { z } from "zod";
 import type { Database } from "@/lib/supabase/types";
 import { applyTradePreset } from "@/lib/crm/apply-trade-preset";
 import type { createAccountSchema } from "@/lib/validation/leads";
-import { getEmailProvider, getSmsProvider } from "@/lib/adapters";
+import { getEmailProvider } from "@/lib/adapters";
 import { ensureClientAutomations } from "@/lib/automations";
 import { welcomeEmailHtml } from "@/lib/email/welcome";
 import { SITEWYRE_AGENCY_ID } from "@/lib/agencies";
@@ -26,15 +26,7 @@ export type CreateClientResult =
 export async function createClientAccount(
   supabase: Admin,
   input: AccountInput,
-  options: {
-    agencyId?: string;
-    actorId?: string;
-    auditVia: string;
-    /** Never buy a Twilio number as part of creating the account. The
-     * admin "Add client" form sets this: buying a number costs money and
-     * has its own button with a price shown first. */
-    skipNumberPurchase?: boolean;
-  },
+  options: { agencyId?: string; actorId?: string; auditVia: string },
 ): Promise<CreateClientResult> {
   const agencyId = options.agencyId ?? SITEWYRE_AGENCY_ID;
   const siteKey = nanoid(24);
@@ -66,23 +58,9 @@ export async function createClientAccount(
     }
   }
 
-  let twilioPhone: string | null = null;
-  let twilioSid: string | null = null;
-  try {
-    if (!options.skipNumberPurchase && (input.area_code || input.phone)) {
-      const area =
-        input.area_code ??
-        normalizePhone(input.phone ?? "").replace("+1", "").slice(0, 3);
-      if (area.length === 3) {
-        const bought = await getSmsProvider().buyLocalNumber(area);
-        twilioPhone = bought.phoneNumber;
-        twilioSid = bought.sid;
-      }
-    }
-  } catch (err) {
-    console.warn("Twilio number provision skipped", err);
-  }
-
+  // Creating an account never buys a Twilio number. Numbers cost money,
+  // so they are only bought through the Phone tab or /admin, which show
+  // the price and ask for confirmation first.
   const { data: client, error } = await supabase
     .from("clients")
     .insert({
@@ -99,8 +77,8 @@ export async function createClientAccount(
       site_key: siteKey,
       plan: "contractor_299",
       status: "active",
-      twilio_phone_number: twilioPhone,
-      twilio_phone_sid: twilioSid,
+      twilio_phone_number: null,
+      twilio_phone_sid: null,
       a2p_status: "pending",
       setup_checklist: {
         verify_phone: false,

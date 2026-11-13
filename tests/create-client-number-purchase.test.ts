@@ -37,20 +37,22 @@ beforeEach(() => {
 });
 
 describe("createClientAccount and Twilio numbers", () => {
-  it("never buys a number when the caller says to skip it, even with a phone entered", async () => {
+  it("never buys a number from the admin form, even with a phone entered", async () => {
     const { createClientAccount } = await import("@/lib/accounts/create-client");
-    const result = await createClientAccount(supabase as never, input, {
-      auditVia: "admin_add_client",
-      skipNumberPurchase: true,
-    });
+    const result = await createClientAccount(supabase as never, input, { auditVia: "admin_add_client" });
     expect(result).toMatchObject({ ok: true, twilioPhoneNumber: null });
     expect(buyLocalNumber).not.toHaveBeenCalled();
     expect(insertedClient).toMatchObject({ twilio_phone_number: null, phone: "+14055550100" });
   });
 
-  it("still provisions a number for the automated account route, which doesn't skip it", async () => {
+  it("never buys a number from the automated account route either, even when an area code is sent", async () => {
     const { createClientAccount } = await import("@/lib/accounts/create-client");
-    await createClientAccount(supabase as never, input, { auditVia: "internal_api" });
-    expect(buyLocalNumber).toHaveBeenCalledWith("405");
+    const result = await createClientAccount(
+      supabase as never,
+      { ...input, area_code: "405" },
+      { auditVia: "n8n_internal_api" },
+    );
+    expect(result).toMatchObject({ ok: true, twilioPhoneNumber: null });
+    expect(buyLocalNumber).not.toHaveBeenCalled();
   });
 });
