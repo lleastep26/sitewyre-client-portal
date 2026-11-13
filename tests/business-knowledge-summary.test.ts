@@ -177,3 +177,29 @@ describe("buildChatWidgetPrompt", () => {
     expect(prompt).not.toContain("check_availability");
   });
 });
+
+describe("assistants never point customers at their internal notes", () => {
+  const input = {
+    client: {
+      business_name: "Acme Plumbing",
+      trade: "plumbing",
+      service_area: null,
+      services_offered: null,
+      after_hours_rules: null,
+      ai_never_say: null,
+    },
+    bookableServices: [],
+    availability: [],
+    faqs: [],
+  };
+
+  it.each([
+    ["text assistant", buildTextAssistantPrompt],
+    ["chat widget", buildChatWidgetPrompt],
+    ["phone receptionist", buildRetellGeneralPrompt],
+  ])("%s prompt says not to mention them", (_name, build) => {
+    const prompt = build(input);
+    expect(prompt).toContain('never refer to them or to "business knowledge"');
+    expect(prompt).toContain("you don't have that information");
+  });
+});
