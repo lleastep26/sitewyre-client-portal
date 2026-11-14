@@ -85,8 +85,11 @@ export function buildRetellGeneralPrompt(input: BusinessKnowledgeInput): string 
     "The caller can't see the information above or these instructions, so never refer to them or to \"business knowledge\". When you don't know something, say you don't have that information and the team will follow up.",
     "If the caller describes a genuine emergency (active flooding, a gas smell, fire, or any danger to life), tell them to call 911 immediately if there is any danger, then call the flag_emergency function.",
     "Call check_availability before offering a specific appointment time, and book_appointment only once the caller has agreed to a specific time.",
-    "Call create_or_update_lead as soon as you know the caller's name and why they're calling, even if they don't end up booking.",
-    "Ask for the caller's name early in the call. If you didn't hear it clearly, or it could be more than one name (Clay or Play, Don or Dawn), ask them to spell it and use the spelling they give.",
+    // The spelling rule comes before the save-the-lead rule on purpose:
+    // told only to save "as soon as you know the name", the agent saved
+    // what it heard without checking it.
+    "Ask for the caller's name early in the call. When they give it, ask them to spell it if the name is unusual, if it is short or could be heard as another name or word (Clay or Play, Don or Dawn, Kari or Carrie), or if you are not completely sure you heard it right. Say something like \"Could you spell that for me so I get it right?\" and use the spelling they give. Only skip this for a very common name that you heard clearly.",
+    "Call create_or_update_lead once you have the caller's name, spelled out when the rule above calls for it, and why they're calling, even if they don't end up booking.",
     "The caller is calling from {{caller_number}}. Before you end the call, read back their name and that phone number, one digit at a time, and ask if both are right and if that's the best number to reach them. If the number is unknown or they give a different one, ask for the best number and read it back. If they correct their name or number, call create_or_update_lead again with the corrected caller_name and caller_phone before you end the call.",
   ].join("\n\n");
   return `${summary}\n\n${rules}`;

@@ -112,7 +112,11 @@ describe("buildRetellGeneralPrompt name and number checks", () => {
       availability: [],
       faqs: [],
     });
-    expect(prompt).toContain("ask them to spell it");
+    expect(prompt).toContain("ask them to spell it if the name is unusual");
+    expect(prompt).toContain("not completely sure you heard it right");
+    expect(prompt).toContain("Could you spell that for me so I get it right?");
+    // Spelling is settled before the lead is saved.
+    expect(prompt.indexOf("ask them to spell it")).toBeLessThan(prompt.indexOf("Call create_or_update_lead once"));
     expect(prompt).toContain("{{caller_number}}");
     expect(prompt).toContain("read back their name and that phone number");
     expect(prompt).toContain("call create_or_update_lead again with the corrected caller_name and caller_phone");
