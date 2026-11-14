@@ -70,8 +70,13 @@ describe("classifyLeadCaller", () => {
     ).toMatchObject({ kind: "rejected", status: 401 });
   });
 
-  it("refuses any secret when none is configured, rather than treating it as valid", () => {
-    expect(classifyLeadCaller(req({ "x-leads-secret": "anything" }), {})).toMatchObject({ kind: "rejected" });
+  it("ignores a secret header while none is configured, so n8n can send it before the env var exists", () => {
+    // The real rollout order: n8n gets the secret first.
+    expect(classifyLeadCaller(req({ "x-leads-secret": SECRET }), {})).toEqual({ kind: "server" });
+    // Not treated as proof of anything: with an Origin it's still a browser.
+    expect(
+      classifyLeadCaller(req({ "x-leads-secret": "anything", origin: "https://evil.example" }), {}),
+    ).toEqual({ kind: "browser", origin: "https://evil.example" });
   });
 
   it("treats a request with an Origin as a browser", () => {
@@ -111,6 +116,12 @@ describe("POST /api/leads: server calls (n8n)", () => {
   it("accepts an unsigned server call only while no secret is configured", async () => {
     vi.stubEnv("LEADS_API_SECRET", "");
     expect((await post({})).status).toBe(200);
+    expect(ingestLead).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts n8n's call carrying the secret before the env var has been set", async () => {
+    vi.stubEnv("LEADS_API_SECRET", "");
+    expect((await post({ "x-leads-secret": SECRET })).status).toBe(200);
     expect(ingestLead).toHaveBeenCalledTimes(1);
   });
 });

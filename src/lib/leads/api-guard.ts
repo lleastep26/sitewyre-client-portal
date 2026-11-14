@@ -14,8 +14,9 @@ import { createHash, timingSafeEqual } from "node:crypto";
  *   per-visitor and per-client limits and a hidden trap field.
  *
  * A request with neither is refused once LEADS_API_SECRET is set. Until
- * it is set, such a request is still let through, so the endpoint can be
- * deployed before n8n has been given the secret.
+ * it is set, a server call is let through with or without a secret
+ * header, so n8n can be given the secret first and nothing is refused in
+ * between.
  */
 
 export const LEADS_SECRET_HEADER = "x-leads-secret";
@@ -47,11 +48,16 @@ export function classifyLeadCaller(
   const expected = env.LEADS_API_SECRET?.trim() || null;
   const given = request.headers.get(LEADS_SECRET_HEADER)?.trim() || null;
 
-  if (given) {
-    // A secret that's wrong is always refused, whatever else was sent.
-    if (expected && sameSecret(given, expected)) return { kind: "server" };
+  if (given && expected) {
+    // Once a secret is configured, a wrong one is always refused,
+    // whatever else was sent.
+    if (sameSecret(given, expected)) return { kind: "server" };
     return { kind: "rejected", status: 401, error: "Invalid API secret" };
   }
+  // With no secret configured yet there is nothing to compare against, so
+  // a secret header is ignored rather than refused. n8n is given the
+  // secret before LEADS_API_SECRET is set here, and its calls must keep
+  // working in between.
 
   const origin = request.headers.get("origin");
   if (origin) return { kind: "browser", origin };
