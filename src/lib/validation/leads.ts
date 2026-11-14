@@ -14,6 +14,8 @@ export const leadIngestSchema = z.object({
   turnstile_token: z.string().optional(),
   sms_opt_in: z.boolean().optional(),
   consent_text: z.string().optional(),
+  /** Honeypot: a hidden form field real visitors never fill in. */
+  website: z.string().optional(),
 });
 
 export type LeadIngest = z.infer<typeof leadIngestSchema>;

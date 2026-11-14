@@ -73,7 +73,12 @@ beforeEach(() => {
   vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key");
   reviewsInserted = [];
   ingestLead.mockResolvedValue({ leadId: "lead1", contactId: "contact1" });
-  resolveClient.mockResolvedValue({ id: "client1", google_review_url: null });
+  resolveClient.mockResolvedValue({
+    id: "client1",
+    google_review_url: null,
+    domain: "acme-plumbing.com",
+    live_site_url: null,
+  });
   siteverify = vi.fn(async () => ({ json: async () => ({ success: true }) }));
   vi.stubGlobal("fetch", siteverify);
 });

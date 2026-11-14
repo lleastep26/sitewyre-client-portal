@@ -7,6 +7,7 @@
 | Item | Behavior |
 |------|----------|
 | **Turnstile** | Only on forms the portal hosts: the booking page and the embeddable booking calendar and lead form, when both `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set. Never on client websites: the chat widget, form capture, `/api/leads` and `/api/reviews/rating` don't use it |
+| **`/api/leads`** | Server calls (n8n) must send `X-Leads-Secret` equal to `LEADS_API_SECRET` once that is set. Browser posts must come from the client's saved website and are limited per visitor and per client, with a hidden `website` trap field |
 | **Crew RLS** | Migration `0005_crew_rls_tighten.sql` — crew writes jobs/appointments/inbox; quotes/invoices/settings-like tables owner/office only |
 | **Expo app** | `apps/mobile` — login + crew today against shared Supabase |
 | **Owner mobile** | Owner/office: Leads + Inbox (SMS reply) + Today; crew stays Today-only |
