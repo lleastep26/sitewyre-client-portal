@@ -14,18 +14,11 @@ export function OPTIONS() {
 }
 
 /**
- * n8n's "Review Submitted workflow" calls this from a server and doesn't
- * send the shared secret yet, so its unsigned calls are still accepted.
- * Set this to true once that n8n node sends X-Leads-Secret; unsigned
- * server calls are then refused whenever LEADS_API_SECRET is set.
- */
-const REQUIRE_SECRET_FOR_SERVERS = false;
-
-/**
  * Stores a star rating. Protected like /api/leads (see
  * src/lib/leads/api-guard.ts): a browser post must come from the client's
  * saved website and is limited per visitor and per client, with a hidden
- * trap field; a server call may carry the shared secret.
+ * trap field; a server call (n8n's "Review Submitted workflow") must
+ * carry the shared secret.
  *
  * No Turnstile: called from clients' own websites.
  */
@@ -43,9 +36,7 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
-  const caller = classifyLeadCaller(request, process.env, {
-    requireSecretForServers: REQUIRE_SECRET_FOR_SERVERS,
-  });
+  const caller = classifyLeadCaller(request);
   if (caller.kind === "rejected") return json({ error: caller.error }, caller.status);
 
   try {

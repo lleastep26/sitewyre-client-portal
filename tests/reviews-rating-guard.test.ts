@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { classifyLeadCaller } from "@/lib/leads/api-guard";
 
 const resolveClient = vi.fn();
 vi.mock("@/lib/crm/resolve-client", () => ({ resolveClient }));
@@ -104,31 +103,18 @@ describe("POST /api/reviews/rating: browser posts", () => {
 });
 
 describe("POST /api/reviews/rating: server calls (n8n)", () => {
-  it("still accepts n8n's unsigned call while its node hasn't been given the secret", async () => {
+  it("refuses an unsigned server call", async () => {
     const res = await post({});
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+    expect(reviewsInserted).toEqual([]);
+  });
+
+  it("accepts n8n's call with the right secret and refuses a wrong one", async () => {
+    expect((await post({ "x-leads-secret": SECRET })).status).toBe(200);
     expect(reviewsInserted).toHaveLength(1);
     // No visitor to count: nothing is recorded against a limit.
     expect(capturesInserted).toEqual([]);
-  });
-
-  it("accepts the right secret and always refuses a wrong one", async () => {
-    expect((await post({ "x-leads-secret": SECRET })).status).toBe(200);
     expect((await post({ "x-leads-secret": "wrong" })).status).toBe(401);
     expect(reviewsInserted).toHaveLength(1);
-  });
-});
-
-describe("classifyLeadCaller: servers that don't have the secret yet", () => {
-  const req = (headers: Record<string, string>) =>
-    new Request("http://localhost/x", { method: "POST", headers });
-
-  it("lets an unsigned server call through only when told that server isn't ready", () => {
-    const env = { LEADS_API_SECRET: SECRET };
-    expect(classifyLeadCaller(req({}), env, { requireSecretForServers: false })).toEqual({ kind: "server" });
-    expect(classifyLeadCaller(req({}), env)).toMatchObject({ kind: "rejected", status: 401 });
-    expect(classifyLeadCaller(req({ "x-leads-secret": "wrong" }), env, { requireSecretForServers: false })).toMatchObject({
-      kind: "rejected",
-    });
   });
 });

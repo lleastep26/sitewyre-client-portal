@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
- * Who is calling POST /api/leads, and whether they may.
+ * Who is calling POST /api/leads or POST /api/reviews/rating, and whether
+ * they may.
  *
  * Two kinds of caller are allowed:
  *
@@ -36,14 +37,6 @@ function sameSecret(given: string, expected: string): boolean {
 export function classifyLeadCaller(
   request: Request,
   env: Record<string, string | undefined> = process.env,
-  opts: {
-    /**
-     * False while a server that calls this endpoint hasn't been given the
-     * secret yet: its unsigned calls are still let through even with
-     * LEADS_API_SECRET set. A wrong secret is refused either way.
-     */
-    requireSecretForServers?: boolean;
-  } = {},
 ): LeadCaller {
   const expected = env.LEADS_API_SECRET?.trim() || null;
   const given = request.headers.get(LEADS_SECRET_HEADER)?.trim() || null;
@@ -62,7 +55,7 @@ export function classifyLeadCaller(
   const origin = request.headers.get("origin");
   if (origin) return { kind: "browser", origin };
 
-  if (expected && opts.requireSecretForServers !== false) {
+  if (expected) {
     return {
       kind: "rejected",
       status: 401,
