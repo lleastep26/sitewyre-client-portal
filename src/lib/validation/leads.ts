@@ -32,6 +32,8 @@ export const reviewIngestSchema = z.object({
   feedback: z.string().optional(),
   routed_to_google: z.boolean().optional(),
   turnstile_token: z.string().optional(),
+  /** Honeypot: a hidden form field real visitors never fill in. */
+  website: z.string().optional(),
 });
 
 export const createAccountSchema = z.object({
