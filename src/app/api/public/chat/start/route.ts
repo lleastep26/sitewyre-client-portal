@@ -2,7 +2,6 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { json, options } from "@/lib/http/cors";
 import { ingestLead } from "@/lib/leads/ingest";
-import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import { answerChatMessage } from "@/lib/chat-widget/conversation";
 import {
   CHAT_MAX_MESSAGE_LENGTH,
@@ -26,6 +25,7 @@ const startSchema = z.object({
   name: z.string().trim().min(1).max(100),
   phone: z.string().trim().min(7).max(30),
   message: z.string().trim().min(1).max(CHAT_MAX_MESSAGE_LENGTH),
+  /** Sent by older copies of the script; accepted and ignored. */
   turnstile_token: z.string().optional(),
   /** Honeypot: a hidden field real visitors never fill in. */
   website: z.string().optional(),
@@ -72,8 +72,9 @@ export async function POST(request: Request) {
     }
   }
 
-  const turnstile = await verifyTurnstileToken(input.turnstile_token, ip);
-  if (!turnstile.ok) return json({ error: "Verification failed. Please try again." }, 403);
+  // No Turnstile: the chat runs on the client's own website, where
+  // Sitewyre's Turnstile widget can't. The origin check and per-visitor
+  // limit above, and the hidden trap field, do that job.
 
   const lead = await ingestLead(supabase, client, {
     name: input.name,

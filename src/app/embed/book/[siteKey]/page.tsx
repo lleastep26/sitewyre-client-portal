@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureDefaultAvailability } from "@/lib/scheduling/availability";
 import { smsConsentText } from "@/lib/a2p/consent-text";
+import { portalTurnstileSiteKey } from "@/lib/security/turnstile";
 import { BookingWizard } from "@/app/book/[siteKey]/booking-wizard";
 import { EmbedAutoHeight } from "../../auto-height";
 
@@ -62,6 +63,7 @@ export default async function EmbeddedBookingPage({
         businessName={client.business_name ?? "us"}
         services={services ?? []}
         consentText={smsConsentText(client.business_name)}
+        turnstileSiteKey={portalTurnstileSiteKey()}
         embed
       />
     </main>

@@ -20,6 +20,10 @@
  *    calendar and <div data-sitewyre="lead-form"></div> the lead form.
  *    Sitewyre frames pasted in by hand are sized to fit their content.
  *
+ * No Turnstile (bot check) here: this script runs on other people's
+ * websites, where Sitewyre's Turnstile widget can't. The portal checks
+ * the request's origin, limits each visitor, and uses hidden trap fields.
+ *
  * Plain JavaScript, no dependencies. The chat is drawn inside a shadow
  * root so the host site's styles can't affect it and its styles can't leak
  * out. All text is written with textContent, never innerHTML.
@@ -141,7 +145,6 @@
   function mount(config) {
     var state = loadState();
     var busy = false;
-    var turnstileToken = null;
 
     var host = el("div");
     host.setAttribute("data-sitewyre-chat", "");
@@ -222,30 +225,6 @@
       body.scrollTop = body.scrollHeight;
     }
 
-    /* Turnstile is drawn outside the shadow root (it doesn't reliably
-     * render inside one), and only if the portal has a site key set. */
-    function setUpTurnstile() {
-      if (!config.turnstile_site_key) return;
-      var holder = el("div");
-      holder.style.cssText = "position:fixed;right:16px;bottom:84px;z-index:2147483001";
-      document.body.appendChild(holder);
-      window.__sitewyreTurnstileReady = function () {
-        if (!window.turnstile) return;
-        window.turnstile.render(holder, {
-          sitekey: config.turnstile_site_key,
-          appearance: "interaction-only",
-          callback: function (token) {
-            turnstileToken = token;
-          },
-        });
-      };
-      var ts = document.createElement("script");
-      ts.src =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=__sitewyreTurnstileReady";
-      ts.async = true;
-      document.head.appendChild(ts);
-    }
-
     function renderForm() {
       body.textContent = "";
       foot.style.display = "none";
@@ -317,7 +296,6 @@
           phone: values.phone,
           message: values.message,
           website: trap.value,
-          turnstile_token: turnstileToken || undefined,
         })
           .then(function (data) {
             state = {
@@ -403,10 +381,7 @@
     }
 
     if (state.token) renderChat();
-    else {
-      renderForm();
-      setUpTurnstile();
-    }
+    else renderForm();
   }
 
   /* ---------------------------------------------------------------

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ingestLead } from "@/lib/leads/ingest";
 import { hashIp } from "@/lib/chat-widget/limits";
 import { smsConsentText } from "@/lib/a2p/consent-text";
+import { verifyPortalFormTurnstile } from "@/lib/security/turnstile";
 import { CAPTURE_MAX_PER_IP_PER_HOUR, toCapturedLead } from "@/lib/website/capture";
 
 /**
@@ -45,6 +46,11 @@ export async function submitEmbedLead(
     requestHeaders.get("cf-connecting-ip") ??
     requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     null;
+
+  // Bot check, when Turnstile is set up. The form is the portal's own
+  // page, even when it's framed on a client's site.
+  const botCheck = await verifyPortalFormTurnstile(formData.get("turnstile_token"), ip);
+  if (!botCheck.ok) return { error: "Please complete the security check and try again." };
   const ipHash = ip ? hashIp(ip) : null;
   if (ipHash) {
     const { count } = await supabase

@@ -2,11 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ingestLead = vi.fn();
 const answerChatMessage = vi.fn();
-const verifyTurnstileToken = vi.fn();
 
 vi.mock("@/lib/leads/ingest", () => ({ ingestLead }));
 vi.mock("@/lib/chat-widget/conversation", () => ({ answerChatMessage }));
-vi.mock("@/lib/security/turnstile", () => ({ verifyTurnstileToken }));
 
 type Row = Record<string, unknown>;
 let clientRow: Row | null;
@@ -93,7 +91,6 @@ beforeEach(() => {
   sessionsInserted = [];
   ingestLead.mockResolvedValue({ leadId: "lead1", contactId: "contact1" });
   answerChatMessage.mockResolvedValue({ reply: "Thanks Jo — the team has your request." });
-  verifyTurnstileToken.mockResolvedValue({ ok: true, skipped: true });
 });
 
 describe("GET /api/public/chat/config", () => {
@@ -107,6 +104,18 @@ describe("GET /api/public/chat/config", () => {
     const json = await config();
     expect(json).toMatchObject({ enabled: true, business_name: "Acme Plumbing", color: "#123abc" });
     expect(json.consent_text).toContain("Reply STOP to opt out");
+  });
+
+  it("never hands the script a Turnstile key, even when the keys are set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key");
+    try {
+      const json = await config();
+      expect(json.enabled).toBe(true);
+      expect(json).not.toHaveProperty("turnstile_site_key");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("finds the business by the page's domain when the tag has no site key", async () => {
@@ -182,10 +191,22 @@ describe("POST /api/public/chat/start", () => {
     expect(ingestLead).not.toHaveBeenCalled();
   });
 
-  it("rejects a failed Turnstile check", async () => {
-    verifyTurnstileToken.mockResolvedValue({ ok: false, error: "bad token" });
-    expect((await start()).status).toBe(403);
-    expect(ingestLead).not.toHaveBeenCalled();
+  it("starts a chat with no Turnstile answer even when the Turnstile keys are set", async () => {
+    // The chat runs on the client's own website, where Sitewyre's
+    // Turnstile widget can't. Cloudflare must never be asked.
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key");
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("Cloudflare must not be called")));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const res = await start();
+      expect(res.status).toBe(200);
+      expect(ingestLead).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 
   it("rejects a missing name, phone or message", async () => {

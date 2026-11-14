@@ -198,3 +198,29 @@ describe("website script: embeds", () => {
     expect(frame.style.height).toBe("4000px");
   });
 });
+
+describe("website script: no Turnstile on client websites", () => {
+  it("never loads Cloudflare's script, even if the config carried a Turnstile key", async () => {
+    const page = await load(CONTACT, {
+      config: {
+        enabled: true,
+        capture: true,
+        site_key: "abc",
+        business_name: "Acme Plumbing",
+        color: null,
+        consent_text: "By submitting, you agree…",
+        // What an older portal sent once the keys were set.
+        turnstile_site_key: "site-key",
+      },
+    });
+    // The chat bubble is on the page…
+    expect(page.window.document.querySelector("[data-sitewyre-chat]")).not.toBeNull();
+    // …and nothing from Cloudflare was added to it.
+    const scripts = [...page.window.document.querySelectorAll("script")].map((s) => s.getAttribute("src") ?? "");
+    expect(scripts.some((src) => src.includes("challenges.cloudflare.com"))).toBe(false);
+    expect(SOURCE).not.toContain("challenges.cloudflare.com");
+    // Form capture still works alongside the chat.
+    page.submit("#contact-form");
+    expect(page.sent).toHaveLength(1);
+  });
+});

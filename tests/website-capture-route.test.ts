@@ -185,6 +185,21 @@ describe("POST /api/public/capture", () => {
     expect(ingestLead).not.toHaveBeenCalled();
   });
 
+  it("works with no Turnstile answer when the Turnstile keys are set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key");
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("Cloudflare must not be called")));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      expect(await (await capture(lead)).json()).toEqual({ ok: true });
+      expect(ingestLead).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("rejects a body that isn't JSON or has no site key", async () => {
     expect((await capture("not json")).status).toBe(400);
     expect((await capture({ name: "Jo", phone: "5125550100" })).status).toBe(400);

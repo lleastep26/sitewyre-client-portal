@@ -3,7 +3,6 @@ import { resolveClient } from "@/lib/crm/resolve-client";
 import { leadIngestSchema } from "@/lib/validation/leads";
 import { json, options } from "@/lib/http/cors";
 import { ingestLead } from "@/lib/leads/ingest";
-import { verifyTurnstileToken } from "@/lib/security/turnstile";
 
 export function OPTIONS() {
   return options();
@@ -27,14 +26,11 @@ export async function POST(request: Request) {
     return json({ error: "Missing site_key, domain, or business_name" }, 400);
   }
 
-  const turnstile = await verifyTurnstileToken(
-    input.turnstile_token,
-    request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
-  );
-  if (!turnstile.ok) {
-    return json({ error: turnstile.error ?? "Turnstile failed" }, 403);
-  }
+  // No Turnstile here: this endpoint is called from clients' own websites
+  // and from n8n, where Sitewyre's Turnstile widget can't run (it only
+  // works on hostnames registered with Cloudflare). A turnstile_token in
+  // the body is accepted and ignored. Turnstile protects the forms the
+  // portal hosts itself (see src/lib/security/turnstile.ts).
 
   try {
     const supabase = createAdminClient();

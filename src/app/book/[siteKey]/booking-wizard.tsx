@@ -5,6 +5,7 @@ import { addDays, format, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { bookAppointment } from "./actions";
+import { TurnstileField } from "@/components/security/turnstile-field";
 
 type Service = {
   id: string;
@@ -18,6 +19,7 @@ export function BookingWizard({
   businessName,
   services,
   consentText,
+  turnstileSiteKey,
   embed = false,
 }: {
   siteKey: string;
@@ -25,6 +27,8 @@ export function BookingWizard({
   services: Service[];
   /** SMS consent wording shown under the booking button. */
   consentText: string;
+  /** Turnstile site key, or null when the bot check isn't set up. */
+  turnstileSiteKey: string | null;
   /** Shown inside a frame on the business's own website. */
   embed?: boolean;
 }) {
@@ -34,6 +38,7 @@ export function BookingWizard({
   const [serviceId, setServiceId] = useState("");
   const [day, setDay] = useState<string>("");
   const [slot, setSlot] = useState<string>("");
+  const [attempt, setAttempt] = useState(0);
   const [slots, setSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +75,11 @@ export function BookingWizard({
     setError(null);
     startTransition(async () => {
       const result = await bookAppointment(siteKey, formData);
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        // A bot-check answer can only be used once: get a fresh one.
+        setAttempt((n) => n + 1);
+      }
     });
   }
 
@@ -205,6 +214,7 @@ export function BookingWizard({
           <Input name="name" placeholder="Your name" required />
           <Input name="phone" placeholder="Phone" required />
           <Input name="email" type="email" placeholder="Email" />
+          <TurnstileField key={attempt} siteKey={turnstileSiteKey} />
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "Booking…" : "Confirm booking"}
           </Button>

@@ -56,7 +56,6 @@ export async function GET(request: Request) {
     site_key: client.site_key,
     business_name: business,
     color: color ?? null,
-    turnstile_site_key: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null,
     // Same wording as the SMS disclosure on the generated site's lead form.
     consent_text: smsConsentText(business),
   });

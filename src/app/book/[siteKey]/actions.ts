@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { verifyPortalFormTurnstile } from "@/lib/security/turnstile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findOrCreateContact } from "@/lib/crm/contacts";
 import { isSlotAvailable } from "@/lib/scheduling/slots";
@@ -29,6 +31,18 @@ export async function bookAppointment(siteKey: string, formData: FormData) {
 
   if (!name || !phone || !serviceId || !startAt) {
     return { error: "Name, phone, service, and time are required" };
+  }
+
+  // Bot check, when Turnstile is set up. This form is hosted by the
+  // portal (also when framed on a client's site), so Turnstile can run.
+  const requestHeaders = await headers();
+  const botCheck = await verifyPortalFormTurnstile(
+    formData.get("turnstile_token"),
+    requestHeaders.get("cf-connecting-ip") ??
+      requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim(),
+  );
+  if (!botCheck.ok) {
+    return { error: "Please complete the security check and try again." };
   }
 
   const { data: service } = await supabase

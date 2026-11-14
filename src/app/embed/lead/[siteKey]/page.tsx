@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { smsConsentText } from "@/lib/a2p/consent-text";
+import { portalTurnstileSiteKey } from "@/lib/security/turnstile";
 import { EmbedAutoHeight } from "../../auto-height";
 import { EmbedLeadForm } from "./lead-form";
 
@@ -25,6 +26,7 @@ export default async function EmbeddedLeadFormPage({
         siteKey={siteKey}
         businessName={client.business_name ?? "We"}
         consentText={smsConsentText(client.business_name)}
+        turnstileSiteKey={portalTurnstileSiteKey()}
       />
     </main>
   );

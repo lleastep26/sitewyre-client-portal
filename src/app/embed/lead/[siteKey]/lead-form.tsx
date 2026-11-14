@@ -6,16 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { submitEmbedLead } from "./actions";
+import { TurnstileField } from "@/components/security/turnstile-field";
 
 export function EmbedLeadForm({
   siteKey,
   businessName,
   consentText,
+  turnstileSiteKey,
 }: {
   siteKey: string;
   businessName: string;
   consentText: string;
+  /** Turnstile site key, or null when the bot check isn't set up. */
+  turnstileSiteKey: string | null;
 }) {
+  const [attempt, setAttempt] = useState(0);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -36,8 +41,11 @@ export function EmbedLeadForm({
         setError(null);
         start(async () => {
           const result = await submitEmbedLead(siteKey, formData);
-          if ("error" in result) setError(result.error);
-          else setSent(true);
+          if ("error" in result) {
+            setError(result.error);
+            // A bot-check answer can only be used once: get a fresh one.
+            setAttempt((n) => n + 1);
+          } else setSent(true);
         });
       }}
     >
@@ -66,6 +74,7 @@ export function EmbedLeadForm({
           {error}
         </p>
       ) : null}
+      <TurnstileField key={attempt} siteKey={turnstileSiteKey} />
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Sending…" : "Send"}
       </Button>
